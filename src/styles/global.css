@@ -1,0 +1,130 @@
+:root {
+  color: #172033;
+  background:
+    radial-gradient(circle at top, rgba(22, 104, 220, 0.12), transparent 32%),
+    linear-gradient(180deg, #f4f7fb 0%, #eef3fb 100%);
+  font-family:
+    'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  min-height: 100vh;
+}
+
+.app-shell {
+  min-height: 100vh;
+}
+
+.app-logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 16px;
+}
+
+.app-logo__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  color: #fff;
+  background: linear-gradient(135deg, #1668dc, #3b8cff);
+  font-weight: 700;
+}
+
+.app-logo__text {
+  font-weight: 700;
+  color: #172033;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(23, 32, 51, 0.06);
+}
+
+.app-content {
+  padding: 24px;
+}
+
+.page-container {
+  width: 100%;
+}
+
+.page-container__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.toolbar {
+  width: 100%;
+}
+
+.login-page {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(22, 104, 220, 0.2), transparent 24%),
+    radial-gradient(circle at 80% 20%, rgba(0, 179, 126, 0.16), transparent 28%),
+    linear-gradient(145deg, #f4f8ff 0%, #eef3fb 50%, #f7fafc 100%);
+}
+
+.login-card {
+  width: min(460px, 100%);
+  border-radius: 24px;
+  box-shadow: 0 28px 80px rgba(23, 32, 51, 0.12);
+}
+
+.login-kicker {
+  display: inline-block;
+  margin-bottom: 8px;
+  color: #1668dc;
+  font-weight: 600;
+}
+
+.exception-page {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+}
+
+.full-width {
+  width: 100%;
+}
+
+@media (max-width: 992px) {
+  .app-header {
+    padding: 0 16px;
+  }
+
+  .app-content {
+    padding: 16px;
+  }
+
+  .page-container__header {
+    flex-direction: column;
+  }
+}
