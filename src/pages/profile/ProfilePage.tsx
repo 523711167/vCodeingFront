@@ -4,6 +4,7 @@ import PageContainer from '@/components/PageContainer';
 import { useAppSelector } from '@/store/hooks';
 
 function ProfilePage() {
+  // 个人中心直接消费当前已登录用户的权限数据，不额外重复请求。
   const user = useAppSelector((state) => state.permission.user);
 
   return (
@@ -13,6 +14,7 @@ function ProfilePage() {
     >
       <Space direction="vertical" size={16}>
         <Avatar icon={<UserOutlined />} size={72} />
+        {/* 这里先展示最核心的身份信息，后续再扩展密码修改、登录记录等能力。 */}
         <Typography.Title level={4}>{user?.name ?? '未登录用户'}</Typography.Title>
         <Descriptions column={1}>
           <Descriptions.Item label="用户 ID">

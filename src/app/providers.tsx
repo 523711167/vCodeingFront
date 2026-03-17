@@ -7,17 +7,22 @@ import { store } from '@/store';
 
 function Providers({ children }: PropsWithChildren) {
   return (
+    // Redux Provider 放在最外层，让整个应用树都能读写全局状态。
     <Provider store={store}>
       <ConfigProvider
         locale={zhCN}
         theme={{
+          // 这里先放一组项目级主题 token。
+          // 后续如果接设计系统，可以继续在这里集中扩展颜色、圆角、字号等设计变量。
           token: {
             colorPrimary: '#1668dc',
             borderRadius: 12,
           },
         }}
       >
+        {/* AntdApp 用来承接 message、modal 等全局能力。 */}
         <AntdApp>
+          {/* 路由容器放在 Provider 内部，确保页面切换过程中仍然能访问 store。 */}
           <BrowserRouter>{children}</BrowserRouter>
         </AntdApp>
       </ConfigProvider>

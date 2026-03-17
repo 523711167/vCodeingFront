@@ -13,12 +13,16 @@ import MenuManagementPage from '@/pages/system/MenuManagementPage';
 import RoleManagementPage from '@/pages/system/RoleManagementPage';
 import UserManagementPage from '@/pages/system/UserManagementPage';
 
+// publicRoutes 专门放不需要登录即可访问的页面。
+// 这里用对象而不是数组，是为了在 AppRouter 里按语义取值更直观。
 export const publicRoutes = {
   login: <LoginPage />,
   forbidden: <ForbiddenPage />,
   notFound: <NotFoundPage />,
 };
 
+// businessRoutes 是整个后台的“业务路由单一事实源”。
+// 菜单渲染、面包屑、权限过滤都依赖这份配置，所以新增页面时优先改这里。
 export const businessRoutes: AppRouteItem[] = [
   {
     path: '/dashboard',
@@ -31,6 +35,7 @@ export const businessRoutes: AppRouteItem[] = [
   },
   {
     path: '/content',
+    // 父级路由本身不渲染内容页，只负责把访问重定向到默认子页面。
     element: <Navigate replace to="/content/list" />,
     meta: {
       title: '内容管理',
@@ -52,6 +57,8 @@ export const businessRoutes: AppRouteItem[] = [
         meta: {
           title: '新增内容',
           authCode: 'content:form:view',
+          // hidden=true 表示仍然可以访问，但不出现在侧边菜单里。
+          // 这类路由通常用于详情页、编辑页、创建页。
           hidden: true,
         },
       },

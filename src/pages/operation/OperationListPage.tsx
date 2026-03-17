@@ -6,6 +6,7 @@ import PageContainer from '@/components/PageContainer';
 import PermissionButton from '@/components/PermissionButton';
 import { fetchActivityList, type ActivityItem } from '@/services/operation.service';
 
+// 活动列表沿用内容列表的交互骨架，目的是让后台各业务模块的页面结构统一。
 const columns: ColumnsType<ActivityItem> = [
   {
     dataIndex: 'name',
@@ -34,6 +35,7 @@ function OperationListPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    // 当前先走 mock service，页面层不区分 mock 和真实接口来源。
     setLoading(true);
     fetchActivityList()
       .then((result) => setData(result.list))
@@ -47,6 +49,7 @@ function OperationListPage() {
         <PermissionButton
           permissionCode="operation:create"
           type="primary"
+          // 活动创建走独立页面，方便后续扩展更复杂的活动配置表单。
           onClick={() => navigate('/operation/create')}
         >
           新增活动
@@ -64,6 +67,7 @@ function OperationListPage() {
               title: '操作',
               render: (_, record) => (
                 <Space>
+                  {/* 操作区仍然统一走权限按钮，避免页面里手写按钮显隐判断。 */}
                   <PermissionButton
                     permissionCode="operation:edit"
                     onClick={() => navigate(`/operation/edit/${record.id}`)}

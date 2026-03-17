@@ -30,6 +30,7 @@ const iconMap: Record<string, ReactNode> = {
 
 function toMenuItems(routes: AppRouteItem[]): MenuProps['items'] {
   return routes
+    // hidden 路由不出现在菜单里，但路由本身仍然可以访问。
     .filter((route) => !route.meta.hidden)
     .map((route) => {
       const children = route.children?.filter((child) => !child.meta.hidden);
@@ -57,6 +58,8 @@ function findBreadcrumbItems(routes: AppRouteItem[], pathname: string) {
   const walk = (nodes: AppRouteItem[], parents: { title: string }[]) => {
     for (const node of nodes) {
       const nextParents = [...parents, { title: node.meta.title }];
+      // 使用 matchPath 而不是简单字符串相等，
+      // 是为了兼容 /edit/:id 这类带动态参数的路径。
       const isMatch = matchPath({ path: node.path, end: true }, pathname);
 
       if (isMatch) {
@@ -84,10 +87,12 @@ function MainLayout({ routes }: MainLayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const dispatch = useAppDispatch();
+  // openKeys 只负责当前菜单展开状态，不需要进入全局 store。
   const [openKeys, setOpenKeys] = useState<string[]>([]);
   const collapsed = useAppSelector((state) => state.app.siderCollapsed);
   const user = useAppSelector((state) => state.permission.user);
 
+  // 菜单项和面包屑都从同一份 routes 推导，避免页面标题和菜单结构各维护一套配置。
   const menuItems = useMemo(() => toMenuItems(routes), [routes]);
   const breadcrumbItems = useMemo(
     () => findBreadcrumbItems(routes, location.pathname),
@@ -95,6 +100,8 @@ function MainLayout({ routes }: MainLayoutProps) {
   );
 
   const selectedKeys = useMemo(() => {
+    // 当前实现只需要匹配两层结构：一级业务模块 + 一级页面。
+    // 如果后续路由层级变深，可以把这段逻辑也改成递归版。
     const matched = routes.flatMap((route) => {
       const nodes = [route, ...(route.children ?? [])];
       return nodes
@@ -108,6 +115,7 @@ function MainLayout({ routes }: MainLayoutProps) {
   }, [location.pathname, routes]);
 
   const handleLogout = () => {
+    // 退出时同时清认证和权限，避免下个账号复用上个账号的菜单缓存。
     dispatch(clearAuth());
     dispatch(clearPermission());
     navigate('/login', { replace: true });
@@ -129,6 +137,7 @@ function MainLayout({ routes }: MainLayoutProps) {
         <Menu
           items={menuItems}
           mode="inline"
+          // 菜单 key 直接复用路由 path，这样点击后可以直接导航，减少一层映射关系。
           onClick={({ key }) => navigate(String(key))}
           onOpenChange={(keys) => setOpenKeys(keys as string[])}
           openKeys={collapsed ? [] : openKeys}
@@ -161,6 +170,7 @@ function MainLayout({ routes }: MainLayoutProps) {
           </Space>
         </Header>
         <Content className="app-content">
+          {/* 所有业务页面都通过 Outlet 渲染到主布局内容区。 */}
           <Outlet />
         </Content>
       </Layout>

@@ -2,6 +2,7 @@ import type { MenuRecord } from '@/services/menu.service';
 import type { RoleRecord } from '@/services/role.service';
 import type { UserRecord } from '@/services/user.service';
 
+// 三组系统管理 mock 数据集中放在一个文件里，方便系统模块统一维护。
 export const mockUsers: UserRecord[] = [
   { id: 'u1', name: '运营经理', role: '管理员', status: '启用' },
   { id: 'u2', name: '内容编辑', role: '编辑', status: '启用' },
@@ -14,6 +15,7 @@ export const mockRoles: RoleRecord[] = [
   { id: 'r3', name: '运营', description: '负责活动创建与运营配置' },
 ];
 
+// 菜单树结构和菜单权限页里的 Tree 组件保持一一对应关系。
 export const mockMenuTree: MenuRecord[] = [
   {
     key: 'dashboard',

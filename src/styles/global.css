@@ -1,3 +1,5 @@
+/* 根节点统一定义应用的基础视觉语义：
+   主文本色、背景氛围、字体栈和基础排版节奏都从这里出发。 */
 :root {
   color: #172033;
   background:
@@ -9,10 +11,12 @@
   font-weight: 400;
 }
 
+/* 全局盒模型收口，避免组件之间因为 padding / border 计算方式不一致而出错。 */
 * {
   box-sizing: border-box;
 }
 
+/* 保证根节点铺满视口，是后台布局撑满整屏的基础。 */
 html,
 body,
 #root {
@@ -20,14 +24,17 @@ body,
   margin: 0;
 }
 
+/* body 单独补一层最小高度，避免某些浏览器下视口计算不稳定。 */
 body {
   min-height: 100vh;
 }
 
+/* 整个后台外壳至少占满一屏，左侧菜单和右侧内容区都依赖它撑开。 */
 .app-shell {
   min-height: 100vh;
 }
 
+/* 左上角品牌区，承接系统标识与标题。 */
 .app-logo {
   display: flex;
   align-items: center;
@@ -35,6 +42,7 @@ body {
   padding: 20px 16px;
 }
 
+/* 品牌首字母块作为视觉锚点，帮助侧边栏在折叠状态下仍保留识别度。 */
 .app-logo__mark {
   display: inline-flex;
   align-items: center;
@@ -47,11 +55,13 @@ body {
   font-weight: 700;
 }
 
+/* 展开侧边栏时显示的系统标题文本。 */
 .app-logo__text {
   font-weight: 700;
   color: #172033;
 }
 
+/* 头部区域用半透明背景和轻微模糊，和登录页、主内容区形成层次。 */
 .app-header {
   display: flex;
   align-items: center;
@@ -62,14 +72,17 @@ body {
   border-bottom: 1px solid rgba(23, 32, 51, 0.06);
 }
 
+/* 主内容区统一内边距，避免每个页面自己处理外层留白。 */
 .app-content {
   padding: 24px;
 }
 
+/* 页面容器默认铺满可用宽度。 */
 .page-container {
   width: 100%;
 }
 
+/* 页面头部区域统一处理标题、说明和右侧操作按钮的布局。 */
 .page-container__header {
   display: flex;
   align-items: flex-start;
@@ -77,10 +90,12 @@ body {
   gap: 16px;
 }
 
+/* 工具区宽度拉满，方便放搜索栏、筛选项和操作按钮。 */
 .toolbar {
   width: 100%;
 }
 
+/* 登录页单独做一层氛围背景，避免后台骨架看起来过于平直。 */
 .login-page {
   display: grid;
   place-items: center;
@@ -92,12 +107,14 @@ body {
     linear-gradient(145deg, #f4f8ff 0%, #eef3fb 50%, #f7fafc 100%);
 }
 
+/* 登录卡片控制最大宽度和投影层级，让登录入口更集中。 */
 .login-card {
   width: min(460px, 100%);
   border-radius: 24px;
   box-shadow: 0 28px 80px rgba(23, 32, 51, 0.12);
 }
 
+/* 登录页上方的小标题，用来强调项目身份。 */
 .login-kicker {
   display: inline-block;
   margin-bottom: 8px;
@@ -105,16 +122,19 @@ body {
   font-weight: 600;
 }
 
+/* 403 / 404 这类异常页统一居中。 */
 .exception-page {
   display: grid;
   place-items: center;
   min-height: 100vh;
 }
 
+/* 表单里需要横向撑满的控件统一使用这个工具类。 */
 .full-width {
   width: 100%;
 }
 
+/* 小屏下优先保证留白和结构不挤压。 */
 @media (max-width: 992px) {
   .app-header {
     padding: 0 16px;

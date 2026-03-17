@@ -5,6 +5,7 @@ import PageContainer from '@/components/PageContainer';
 function OperationFormPage() {
   const navigate = useNavigate();
   const { id } = useParams();
+  // 和内容表单一致，通过路由参数决定当前是新增还是编辑。
   const isEdit = Boolean(id);
 
   return (
@@ -15,6 +16,8 @@ function OperationFormPage() {
       <Form
         layout="vertical"
         onFinish={() => {
+          // 当前先保证提交完成后的用户反馈和跳转路径正确，
+          // 真正接接口时可以在这里补充保存请求和异常处理。
           message.success(isEdit ? '活动更新成功' : '活动创建成功');
           navigate('/operation/list');
         }}
@@ -45,6 +48,7 @@ function OperationFormPage() {
           name="period"
           rules={[{ required: true, message: '请选择活动周期' }]}
         >
+          {/* RangePicker 很适合表达活动开始和结束时间这一类双端字段。 */}
           <DatePicker.RangePicker className="full-width" />
         </Form.Item>
         <Form.Item

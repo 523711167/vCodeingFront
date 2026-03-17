@@ -12,6 +12,10 @@ function LoginPage() {
 
   const handleSubmit = async (values: LoginRequest) => {
     try {
+      // 登录流程分成三步：
+      // 1. 请求 token
+      // 2. 请求当前用户和权限信息
+      // 3. 把认证与权限一起写入 store 和本地缓存
       dispatch(setLoginLoading(true));
       const loginResult = await login(values);
       dispatch(setToken(loginResult.token));
@@ -44,6 +48,7 @@ function LoginPage() {
           </div>
 
           <Alert
+            // 这里明确标出 mock 账号，是为了让骨架项目开箱即测。
             message="Mock 登录账号：admin / 123456"
             showIcon
             type="info"

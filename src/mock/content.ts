@@ -1,5 +1,6 @@
 import type { ContentItem } from '@/services/content.service';
 
+// 内容列表数据刻意覆盖“已发布 / 草稿”两种状态，用于验证状态标签展示。
 export const mockContentList: ContentItem[] = [
   {
     id: 'c-001',
