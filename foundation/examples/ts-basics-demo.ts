@@ -31,39 +31,7 @@ export type UserProfile = {
   role: 'admin' | 'editor' | 'visitor';
 };
 
-/**
- * 这里用 `interface` 表达另一个对象契约，用来说明 `type` 和 `interface`
- * 在“描述对象形状”这个层面都能完成工作。
- *
- * 选择保留两种写法，是为了让学习者尽快适应真实项目里两者并存的情况，
- * 后续如果项目团队形成统一规范，再按规范收敛即可。
- */
-export interface ProductInfo {
-  id: number;
-  title: string;
-  price: number;
-}
 
-/**
- * 这个函数负责演示参数类型和返回值类型。
- * 之所以显式写 `: number`，是为了强调“函数边界”是最值得补类型的位置。
- */
-export function add(a: number, b: number): number {
-  return a + b;
-}
-
-/**
- * 这个函数演示联合类型和类型收窄。
- * 当前实现使用 `typeof` 分支判断，是因为它是最容易理解、最常见的收窄手段之一。
- * 如果后续要扩展到更复杂对象，可以继续补 `in`、自定义 type guard 等方式。
- */
-export function formatValue(value: string | number): string {
-  if (typeof value === 'string') {
-    return value.toUpperCase();
-  }
-
-  return value.toFixed(2);
-}
 
 /**
  * 泛型函数的职责是保留输入类型信息，让返回值能跟着输入一起变化。
