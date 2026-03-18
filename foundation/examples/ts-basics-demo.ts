@@ -94,11 +94,12 @@ export type FeatureFlags = typeof featureFlags;
  * 这个工厂函数模拟“从函数生成结构化数据”的场景。
  * 在真实项目里，service 层、store 初始化、数据转换函数都可能出现类似模式。
  */
-export function createLearningUser() {
+export function createLearningUser(val: string) {
   return {
     id: 1,
     name: 'Tom',
     permissions: ['dashboard:view', 'user:edit'],
+    email: "523711167@qq.com"
   };
 }
 
@@ -138,7 +139,7 @@ export const fakeStore = {
       },
     };
   },
-  dispatch(action: { type: string; payload?: unknown }) {
+  dispatch(action: { type: string; payload?: unknown }): {type: string; payload?: unknown} {
     return action;
   },
 };
@@ -154,13 +155,14 @@ export type RootState = ReturnType<typeof fakeStore.getState>;
  * 在接入 thunk、中间件、异步 action 时，这种写法能避免手写 dispatch 类型失真。
  */
 export type AppDispatch = typeof fakeStore.dispatch;
+export type ss = ReturnType<AppDispatch>;
 
 /**
  * 这两个导出值只是为了让学习时更容易在编辑器里查看最终推导结果，
  * 不承担业务逻辑职责。
  */
 export const exampleRootState: RootState = fakeStore.getState();
-export const exampleDispatchResult = fakeStore.dispatch({
+export const exampleDispatchResult: ss = fakeStore.dispatch({
   type: 'user/updateName',
   payload: { name: 'Jerry' },
 });
