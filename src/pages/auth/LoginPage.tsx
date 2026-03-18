@@ -1,5 +1,5 @@
 import { message, Alert, Button, Card, Form, Input, Space, Typography } from 'antd';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   getDefaultRoutePath,
   login,
@@ -13,10 +13,35 @@ const isAuthMock = import.meta.env.VITE_USE_AUTH_MOCK
   ? import.meta.env.VITE_USE_AUTH_MOCK !== 'false'
   : import.meta.env.VITE_USE_MOCK !== 'false';
 
+interface LoginRouteState {
+  from?: {
+    hash?: string;
+    pathname?: string;
+    search?: string;
+  };
+}
+
+function getLoginSuccessTarget(
+  routeState: LoginRouteState | null,
+  fallbackPath: string,
+) {
+  const pathname = routeState?.from?.pathname;
+
+  // 登录后优先回到认证守卫记录下来的原始页面。
+  // 只有在没有来源页时，才回退到默认首页。
+  if (!pathname || pathname === '/login') {
+    return fallbackPath;
+  }
+
+  return `${pathname}${routeState.from?.search ?? ''}${routeState.from?.hash ?? ''}`;
+}
+
 function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const dispatch = useAppDispatch();
   const loginLoading = useAppSelector((state) => state.auth.loginLoading);
+  const routeState = location.state as LoginRouteState | null;
 
   const handleSubmit = async (values: LoginRequest) => {
     try {
@@ -29,7 +54,13 @@ function LoginPage() {
       dispatch(setAuthSession(loginResult.session));
       dispatch(setPermissionPayload(loginResult.permissionPayload));
       message.success('登录成功，欢迎回来');
-      navigate(getDefaultRoutePath(loginResult.permissionPayload), { replace: true });
+      navigate(
+        getLoginSuccessTarget(
+          routeState,
+          getDefaultRoutePath(loginResult.permissionPayload),
+        ),
+        { replace: true },
+      );
     } catch (error) {
       message.error(
         error instanceof Error ? error.message : '登录失败，请稍后重试',
