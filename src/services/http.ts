@@ -4,6 +4,7 @@ import axios, {
   type AxiosRequestConfig,
 } from 'axios';
 import { message } from 'antd';
+import { API_BASE_URLS } from '@/services/api-endpoints';
 import { refreshCurrentSession } from '@/services/auth.service';
 import { clearAuth } from '@/store/slices/authSlice';
 import { clearPermission } from '@/store/slices/permissionSlice';
@@ -30,7 +31,7 @@ interface RetryableAxiosRequestConfig extends AxiosRequestConfig {
 // 整个项目只保留一个 axios 实例：
 // 统一 baseURL、超时、认证头、错误处理，避免页面里散落请求规范。
 const http = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL ?? '/api',
+  baseURL: API_BASE_URLS.business,
   timeout: 10000,
 });
 

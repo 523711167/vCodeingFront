@@ -1,4 +1,5 @@
 import { mockActivityList } from '@/mock/operation';
+import { API_ENDPOINTS } from '@/services/api-endpoints';
 import { request } from '@/services/http';
 import type { PageResult } from '@/services/content.service';
 
@@ -26,6 +27,6 @@ export async function fetchActivityList() {
 
   return request<PageResult<ActivityItem>>({
     method: 'get',
-    url: '/activities',
+    url: API_ENDPOINTS.operation.list,
   });
 }

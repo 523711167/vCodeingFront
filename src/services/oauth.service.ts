@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { API_BASE_URLS, API_ENDPOINTS } from '@/services/api-endpoints';
 
 export interface OAuthTokenResponse {
   access_token: string;
@@ -31,10 +32,7 @@ export interface OAuthIntrospectionResponse {
 
 const oauthHttp = axios.create({
   // OAuth2 地址独立配置，避免后续业务 API 走网关或不同前缀时影响登录链路。
-  baseURL:
-    import.meta.env.VITE_OAUTH_BASE_URL ??
-    import.meta.env.VITE_API_BASE_URL ??
-    '/api',
+  baseURL: API_BASE_URLS.oauth,
   timeout: 10000,
 });
 
@@ -61,7 +59,7 @@ export async function requestPasswordToken(username: string, password: string) {
   return oauthHttp
     .request<OAuthTokenResponse>({
       method: 'post',
-      url: '/oauth2/token',
+      url: API_ENDPOINTS.oauth.token,
       data: buildFormBody({
         grant_type: 'password_login',
         password,
@@ -80,7 +78,7 @@ export async function requestRefreshToken(refreshToken: string) {
   return oauthHttp
     .request<OAuthTokenResponse>({
       method: 'post',
-      url: '/oauth2/token',
+      url: API_ENDPOINTS.oauth.token,
       data: buildFormBody({
         grant_type: 'refresh_token',
         refresh_token: refreshToken,
@@ -98,7 +96,7 @@ export async function introspectToken(token: string) {
   return oauthHttp
     .request<OAuthIntrospectionResponse>({
       method: 'post',
-      url: '/oauth2/introspect',
+      url: API_ENDPOINTS.oauth.introspect,
       data: buildFormBody({ token }),
       headers: {
         Authorization: buildClientAuthorizationHeader(),
@@ -111,7 +109,7 @@ export async function introspectToken(token: string) {
 export async function revokeToken(token: string) {
   return oauthHttp.request<void>({
     method: 'post',
-    url: '/oauth2/revoke',
+    url: API_ENDPOINTS.oauth.revoke,
     data: buildFormBody({ token }),
     headers: {
       Authorization: buildClientAuthorizationHeader(),

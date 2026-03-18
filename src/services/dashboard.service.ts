@@ -1,4 +1,5 @@
 import { mockDashboardOverview } from '@/mock/dashboard';
+import { API_ENDPOINTS } from '@/services/api-endpoints';
 import { request } from '@/services/http';
 
 // 工作台概览数据通常是聚合型接口，因此单独抽成一个类型。
@@ -19,6 +20,6 @@ export async function fetchDashboardOverview() {
 
   return request<DashboardOverview>({
     method: 'get',
-    url: '/dashboard/overview',
+    url: API_ENDPOINTS.dashboard.overview,
   });
 }

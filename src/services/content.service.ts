@@ -1,4 +1,5 @@
 import { mockContentList } from '@/mock/content';
+import { API_ENDPOINTS } from '@/services/api-endpoints';
 import { request } from '@/services/http';
 
 // PageResult 抽成泛型后，内容列表、活动列表等分页接口都可以复用同一结构。
@@ -37,6 +38,6 @@ export async function fetchContentList() {
   return request<PageResult<ContentItem>>({
     method: 'get',
     // 当前路径只是骨架示例，后续可以按后端接口规范调整，但页面层无需改动。
-    url: '/contents',
+    url: API_ENDPOINTS.content.list,
   });
 }
