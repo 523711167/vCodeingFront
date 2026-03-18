@@ -137,18 +137,6 @@ function buildPermissionPayload(claims: OAuthIntrospectionResponse): PermissionP
   };
 }
 
-function shouldUpgradeSession(claims: OAuthIntrospectionResponse) {
-  // 按 2026-03-18 的后端测试记录，初始 access_token 的 claim 可能不完整，
-  // refresh 后的新 token 才会带 roles / permissions / real_name。
-  // 这里自动补一次 refresh，避免用户首次登录后拿不到菜单和按钮权限。
-  return (
-    !claims.roles?.length &&
-    !claims.permissions?.length &&
-    !claims.real_name &&
-    !claims.user_id
-  );
-}
-
 export function getDefaultRoutePath(payload?: PermissionPayload | null) {
   return payload?.menus[0]?.path ?? '/403';
 }
@@ -180,20 +168,11 @@ export async function login(payload: LoginRequest) {
   const initialSession = toAuthSession(
     await requestPasswordToken(payload.username, payload.password),
   );
-  let activeSession = initialSession;
-  let claims = await introspectToken(activeSession.accessToken);
+  const activeSession = initialSession;
+  const claims = await introspectToken(activeSession.accessToken);
 
   if (!claims.active) {
     throw new Error('登录成功，但令牌校验失败');
-  }
-
-  if (shouldUpgradeSession(claims) && activeSession.refreshToken) {
-    activeSession = await refreshCurrentSession(activeSession.refreshToken);
-    claims = await introspectToken(activeSession.accessToken);
-  }
-
-  if (!claims.active) {
-    throw new Error('刷新后的令牌不可用，请重新登录');
   }
 
   return {

@@ -2,11 +2,11 @@ import type { PermissionPayload } from '@/services/auth.service';
 
 // token 和权限信息拆开存，主要是为了让读取逻辑更直接：
 // token 用于认证恢复，权限数据用于菜单和按钮恢复。
-const TOKEN_KEY = 'vcodeing-token';
-const REFRESH_TOKEN_KEY = 'vcodeing-refresh-token';
-const TOKEN_TYPE_KEY = 'vcodeing-token-type';
-const TOKEN_EXPIRES_AT_KEY = 'vcodeing-token-expires-at';
-const PERMISSION_KEY = 'vcodeing-permission';
+const TOKEN_KEY = 'vcoding-token';
+const REFRESH_TOKEN_KEY = 'vcoding-refresh-token';
+const TOKEN_TYPE_KEY = 'vcoding-token-type';
+const TOKEN_EXPIRES_AT_KEY = 'vcoding-token-expires-at';
+const PERMISSION_KEY = 'vcoding-permission';
 
 // 这里保留完整认证会话结构，是为了让刷新令牌、撤销令牌等 OAuth2 能力
 // 在请求层和退出流程里都能直接复用，不需要各处自己拼装存储字段。
