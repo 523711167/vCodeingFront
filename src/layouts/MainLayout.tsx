@@ -12,6 +12,7 @@ import {
 } from '@ant-design/icons';
 import { Avatar, Breadcrumb, Button, Layout, Menu, Space, Typography } from 'antd';
 import { Outlet, matchPath, useLocation, useNavigate } from 'react-router-dom';
+import { logout } from '@/services/auth.service';
 import type { AppRouteItem } from '@/router/types';
 import { clearAuth } from '@/store/slices/authSlice';
 import { clearPermission } from '@/store/slices/permissionSlice';
@@ -114,8 +115,10 @@ function MainLayout({ routes }: MainLayoutProps) {
     return matched.length ? matched : [location.pathname];
   }, [location.pathname, routes]);
 
-  const handleLogout = () => {
-    // 退出时同时清认证和权限，避免下个账号复用上个账号的菜单缓存。
+  const handleLogout = async () => {
+    // 退出时先尽量通知后端撤销当前 access_token，再回收本地状态。
+    // 这样本地退出和服务端会话终止能尽量保持一致。
+    await logout();
     dispatch(clearAuth());
     dispatch(clearPermission());
     navigate('/login', { replace: true });

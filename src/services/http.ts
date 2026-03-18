@@ -4,16 +4,27 @@ import axios, {
   type AxiosRequestConfig,
 } from 'axios';
 import { message } from 'antd';
+import { refreshCurrentSession } from '@/services/auth.service';
 import { clearAuth } from '@/store/slices/authSlice';
 import { clearPermission } from '@/store/slices/permissionSlice';
 import { store } from '@/store';
-import { getStoredToken } from '@/utils/storage';
+import { setAuthSession } from '@/store/slices/authSlice';
+import {
+  getStoredRefreshToken,
+  getStoredToken,
+  getStoredTokenType,
+} from '@/utils/storage';
 
 interface ApiResponse<T> {
   code: number;
   message: string;
   data: T;
   traceId?: string;
+}
+
+interface RetryableAxiosRequestConfig extends AxiosRequestConfig {
+  _retry?: boolean;
+  skipAuthRefresh?: boolean;
 }
 
 // 整个项目只保留一个 axios 实例：
@@ -23,14 +34,17 @@ const http = axios.create({
   timeout: 10000,
 });
 
+let refreshingPromise: ReturnType<typeof refreshCurrentSession> | null = null;
+
 http.interceptors.request.use((config) => {
   const token = getStoredToken();
+  const tokenType = getStoredTokenType();
 
   if (token) {
     // Axios 1.x 里 headers 可能是 AxiosHeaders 实例，也可能是普通对象，
     // 这里统一转成 AxiosHeaders 再写入，能避免类型和运行时兼容问题。
     const headers = AxiosHeaders.from(config.headers);
-    headers.set('Authorization', `Bearer ${token}`);
+    headers.set('Authorization', `${tokenType} ${token}`);
     config.headers = headers;
   }
 
@@ -39,7 +53,42 @@ http.interceptors.request.use((config) => {
 
 http.interceptors.response.use(
   (response) => response,
-  (error: AxiosError<{ message?: string }>) => {
+  async (error: AxiosError<{ message?: string }>) => {
+    const originalRequest = error.config as RetryableAxiosRequestConfig | undefined;
+    const canRefresh =
+      error.response?.status === 401 &&
+      !originalRequest?._retry &&
+      !originalRequest?.skipAuthRefresh &&
+      Boolean(getStoredRefreshToken());
+
+    if (canRefresh && originalRequest) {
+      originalRequest._retry = true;
+
+      try {
+        // 并发 401 共用同一条 refresh 请求，避免同一时刻把 refresh_token 打爆。
+        const refreshPromise = refreshingPromise ?? refreshCurrentSession();
+        refreshingPromise = refreshPromise;
+        const refreshedSession = await refreshPromise;
+        store.dispatch(setAuthSession(refreshedSession));
+        const headers = AxiosHeaders.from(
+          originalRequest.headers as AxiosHeaders | undefined,
+        );
+        headers.set(
+          'Authorization',
+          `${refreshedSession.tokenType} ${refreshedSession.accessToken}`,
+        );
+        originalRequest.headers = headers;
+
+        return http.request(originalRequest);
+      } catch {
+        store.dispatch(clearAuth());
+        store.dispatch(clearPermission());
+        message.error('登录状态已失效，请重新登录');
+      } finally {
+        refreshingPromise = null;
+      }
+    }
+
     // 这里兜底的是“网络层错误”，例如超时、断网、网关异常。
     // 业务错误码在 request<T> 里统一处理。
     message.error(error.response?.data?.message ?? '网络请求失败，请稍后重试');

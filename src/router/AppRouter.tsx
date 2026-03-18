@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import type { RouteObject } from 'react-router-dom';
 import { Navigate, useRoutes } from 'react-router-dom';
 import { filterRoutesByPermissions, flattenRoutes } from '@/features/permission/filterRoutes';
+import { getDefaultRoutePath } from '@/services/auth.service';
 import MainLayout from '@/layouts/MainLayout';
 import { businessRoutes, publicRoutes } from '@/router/routes';
 import { AuthGuard } from '@/router/guards';
@@ -27,11 +28,13 @@ function AppRouter() {
   // routeAuthCodes 由权限 slice 统一维护。
   // 路由层不直接关心“角色是什么”，只关心最终可访问的权限码集合。
   const permissionCodes = useAppSelector((state) => state.permission.routeAuthCodes);
+  const currentUser = useAppSelector((state) => state.permission.user);
 
   const allowedBusinessRoutes = useMemo(
     () => filterRoutesByPermissions(businessRoutes, permissionCodes),
     [permissionCodes],
   );
+  const defaultRoutePath = getDefaultRoutePath(currentUser);
 
   const routeObjects = useMemo<RouteObject[]>(
     () => [
@@ -54,9 +57,10 @@ function AppRouter() {
         ),
         children: [
           {
-            // 进入后台根路径时，直接落到工作台。
+            // 默认落点从权限树里推导，而不是写死 dashboard，
+            // 这样当后端只下发系统管理权限时，也不会被重定向到无权页面。
             index: true,
-            element: <Navigate replace to="/dashboard" />,
+            element: <Navigate replace to={defaultRoutePath} />,
           },
           ...toRouteObjects(allowedBusinessRoutes),
         ],
@@ -66,7 +70,7 @@ function AppRouter() {
         element: publicRoutes.notFound,
       },
     ],
-    [allowedBusinessRoutes],
+    [allowedBusinessRoutes, defaultRoutePath],
   );
 
   return useRoutes(routeObjects);

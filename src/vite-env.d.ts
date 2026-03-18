@@ -14,9 +14,21 @@ interface ImportMetaEnv {
   // VITE_USE_MOCK 控制当前是否走前端 mock 数据。
   // 这里保留 string 类型，是因为环境变量在运行时本质上都会以字符串形式注入。
   readonly VITE_USE_MOCK?: string;
+  // VITE_USE_AUTH_MOCK 允许把认证链路单独切到真实后端，
+  // 避免业务页面还没联调完成时，登录能力也被迫继续走 mock。
+  readonly VITE_USE_AUTH_MOCK?: string;
   // VITE_LOGIN_EXPIRE_CODE 用来告诉请求层：哪个业务错误码代表登录失效。
   // 把它做成环境变量后，不同后端约定变化时就不需要直接改业务代码。
   readonly VITE_LOGIN_EXPIRE_CODE?: string;
+  // 下面这组 OAuth2 变量用于本地联调 token、refresh、introspect、revoke。
+  // 如果未来改成 BFF 代理模式，前端只需要保留 baseURL，不再直接暴露 client_secret。
+  readonly VITE_OAUTH_BASE_URL?: string;
+  readonly VITE_OAUTH_CLIENT_ID?: string;
+  readonly VITE_OAUTH_CLIENT_SECRET?: string;
+  readonly VITE_OAUTH_SCOPE?: string;
+  // VITE_IDLE_LOGOUT_MS 控制会话空闲多久后自动退出。
+  // 这里使用毫秒，是为了让本地调试时可以快速改成 10 秒、30 秒等短时值。
+  readonly VITE_IDLE_LOGOUT_MS?: string;
 }
 
 // ImportMeta 是 ES Module 里的元信息对象类型。

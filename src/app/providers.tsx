@@ -3,6 +3,7 @@ import { App as AntdApp, ConfigProvider } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import { BrowserRouter } from 'react-router-dom';
 import { Provider } from 'react-redux';
+import SessionIdleGuard from '@/app/SessionIdleGuard';
 import { store } from '@/store';
 
 function Providers({ children }: PropsWithChildren) {
@@ -23,7 +24,12 @@ function Providers({ children }: PropsWithChildren) {
         {/* AntdApp 用来承接 message、modal 等全局能力。 */}
         <AntdApp>
           {/* 路由容器放在 Provider 内部，确保页面切换过程中仍然能访问 store。 */}
-          <BrowserRouter>{children}</BrowserRouter>
+          <BrowserRouter>
+            {/* 空闲会话守卫必须放在路由容器内部，
+                这样自动退出后才能直接跳回登录页。 */}
+            <SessionIdleGuard />
+            {children}
+          </BrowserRouter>
         </AntdApp>
       </ConfigProvider>
     </Provider>
