@@ -24,6 +24,15 @@ function toRouteObjects(routes: AppRouteItem[]): RouteObject[] {
   }));
 }
 
+function toKnownModuleFallbacks(routes: AppRouteItem[]): RouteObject[] {
+  return routes.map((route) => ({
+    // 一级模块存在，但具体子路径不存在时，仍然保留主布局，
+    // 只在内容区渲染 404，避免把整个应用直接打回首页。
+    path: `${toRelativePath(route.path)}/*`,
+    element: publicRoutes.notFound,
+  }));
+}
+
 function AppRouter() {
   // routeAuthCodes 由权限 slice 统一维护。
   // 路由层不直接关心“角色是什么”，只关心最终可访问的权限码集合。
@@ -35,6 +44,10 @@ function AppRouter() {
     [permissionCodes],
   );
   const defaultRoutePath = getDefaultRoutePath(currentUser);
+  const knownModuleFallbacks = useMemo(
+    () => toKnownModuleFallbacks(allowedBusinessRoutes),
+    [allowedBusinessRoutes],
+  );
 
   const routeObjects = useMemo<RouteObject[]>(
     () => [
@@ -63,14 +76,17 @@ function AppRouter() {
             element: <Navigate replace to={defaultRoutePath} />,
           },
           ...toRouteObjects(allowedBusinessRoutes),
+          ...knownModuleFallbacks,
+          {
+            // 只有“一级路径本身就不存在”时，才回退到系统首页。
+            // 这和已知模块下的二级 404 区分开，避免用户在模块内部误跳首页。
+            path: '*',
+            element: <Navigate replace to={defaultRoutePath} />,
+          },
         ],
       },
-      {
-        path: '*',
-        element: publicRoutes.notFound,
-      },
     ],
-    [allowedBusinessRoutes, defaultRoutePath],
+    [allowedBusinessRoutes, defaultRoutePath, knownModuleFallbacks],
   );
 
   return useRoutes(routeObjects);
