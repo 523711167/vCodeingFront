@@ -23,6 +23,9 @@ interface ImportMetaEnv {
   // 下面这组 OAuth2 变量用于本地联调 token、refresh、introspect、revoke。
   // 如果未来改成 BFF 代理模式，前端只需要保留 baseURL，不再直接暴露 client_secret。
   readonly VITE_OAUTH_BASE_URL?: string;
+  // VITE_OAUTH_PROXY_TARGET 主要给 Vite 开发代理读取，用来指定真正的后端地址。
+  // 虽然前端运行时代码当前不直接消费它，但保留声明可以避免环境配置语义分散。
+  readonly VITE_OAUTH_PROXY_TARGET?: string;
   readonly VITE_OAUTH_CLIENT_ID?: string;
   readonly VITE_OAUTH_CLIENT_SECRET?: string;
   readonly VITE_OAUTH_SCOPE?: string;
