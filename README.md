@@ -7,6 +7,15 @@
 1. 这个项目的代码是怎么组织的。
 2. 读到某个文件时，应该知道它负责什么。
 
+## 补充学习资料
+
+如果你当前的重点是“先补 TypeScript 基础，再回来看项目代码”，可以先阅读：
+
+- [`foundation/README.md`](./foundation/README.md)
+- [`foundation/typescript-basics.md`](./foundation/typescript-basics.md)
+
+这部分内容不是业务设计文档，而是面向学习者的基础知识笔记和示例代码。
+
 ## 1. 项目主线
 
 这个项目是一个基于 `Vite + React + TypeScript + Ant Design + Redux Toolkit + React Router` 的后台前端骨架。
