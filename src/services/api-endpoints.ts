@@ -30,8 +30,11 @@ export const API_ENDPOINTS = {
     list: '/activities',
   },
   dept: {
+    create: '/sys/dept/create',
+    delete: '/sys/dept/delete',
     detail: '/sys/dept/detail',
     tree: '/sys/dept/tree',
+    update: '/sys/dept/update',
   },
   user: {
     create: '/sys/user/create',

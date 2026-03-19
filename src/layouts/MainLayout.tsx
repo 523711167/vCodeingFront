@@ -180,7 +180,7 @@ function MainLayout({ routes }: MainLayoutProps) {
         />
       </Sider>
       <Layout>
-        <Header className="app-header">
+        <Header className="app-header" style={{ flex: '0 0 64px'}}>
           <Space align="center">
             <Button
               icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
@@ -204,7 +204,7 @@ function MainLayout({ routes }: MainLayoutProps) {
             </Button>
           </Space>
         </Header>
-        <Content className="app-content">
+        <Content className="app-content" style={{ flex: '1 1 auto', overflowY: 'auto', minHeight: '0'}}>
           {/* 所有业务页面都通过 Outlet 渲染到主布局内容区。 */}
           <Outlet />
         </Content>
