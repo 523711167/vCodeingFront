@@ -11,9 +11,15 @@ interface ImportMetaEnv {
   readonly VITE_APP_TITLE?: string;
   // VITE_API_BASE_URL 用来约定请求基础地址，让开发、测试、生产环境可以切换不同后端入口。
   readonly VITE_API_BASE_URL?: string;
+  // VITE_API_PROXY_TARGET 主要给 Vite 开发代理读取，用来指定业务接口真正的后端服务。
+  // 这里和 OAuth2 代理分开，是为了后续如果业务接口和认证接口走不同网关时仍能独立切换。
+  readonly VITE_API_PROXY_TARGET?: string;
   // VITE_USE_MOCK 控制当前是否走前端 mock 数据。
   // 这里保留 string 类型，是因为环境变量在运行时本质上都会以字符串形式注入。
   readonly VITE_USE_MOCK?: string;
+  // VITE_USE_USER_MOCK 允许账号管理页单独切到真实接口，
+  // 避免其他业务模块暂时仍在 mock 时，用户管理也被一起锁死在 mock 上。
+  readonly VITE_USE_USER_MOCK?: string;
   // VITE_USE_AUTH_MOCK 允许把认证链路单独切到真实后端，
   // 避免业务页面还没联调完成时，登录能力也被迫继续走 mock。
   readonly VITE_USE_AUTH_MOCK?: string;

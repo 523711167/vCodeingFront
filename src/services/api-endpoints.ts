@@ -29,4 +29,13 @@ export const API_ENDPOINTS = {
   operation: {
     list: '/activities',
   },
+  user: {
+    create: '/sys/user/create',
+    delete: '/sys/user/delete',
+    detail: '/sys/user/detail',
+    page: '/sys/user/page',
+    resetPassword: '/sys/user/password/reset',
+    update: '/sys/user/update',
+    updateStatus: '/sys/user/status/update',
+  },
 } as const;

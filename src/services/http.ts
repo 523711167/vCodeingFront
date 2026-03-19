@@ -18,7 +18,8 @@ import {
 
 interface ApiResponse<T> {
   code: number;
-  message: string;
+  message?: string;
+  msg?: string;
   data: T;
   traceId?: string;
 }
@@ -54,7 +55,7 @@ http.interceptors.request.use((config) => {
 
 http.interceptors.response.use(
   (response) => response,
-  async (error: AxiosError<{ message?: string }>) => {
+  async (error: AxiosError<{ message?: string; msg?: string }>) => {
     const originalRequest = error.config as RetryableAxiosRequestConfig | undefined;
     const canRefresh =
       error.response?.status === 401 &&
@@ -92,7 +93,11 @@ http.interceptors.response.use(
 
     // 这里兜底的是“网络层错误”，例如超时、断网、网关异常。
     // 业务错误码在 request<T> 里统一处理。
-    message.error(error.response?.data?.message ?? '网络请求失败，请稍后重试');
+    message.error(
+      error.response?.data?.message ??
+        error.response?.data?.msg ??
+        '网络请求失败，请稍后重试',
+    );
     return Promise.reject(error);
   },
 );
@@ -101,6 +106,7 @@ export async function request<T>(config: AxiosRequestConfig) {
   const response = await http.request<ApiResponse<T>>(config);
   const result = response.data;
   const loginExpireCode = Number(import.meta.env.VITE_LOGIN_EXPIRE_CODE ?? 40101);
+  const resultMessage = result.message ?? result.msg ?? '请求失败';
 
   if (result.code === 0) {
     return result.data;
@@ -113,6 +119,6 @@ export async function request<T>(config: AxiosRequestConfig) {
     store.dispatch(clearPermission());
   }
 
-  message.error(result.message || '请求失败');
-  throw new Error(result.message || 'Request failed');
+  message.error(resultMessage);
+  throw new Error(resultMessage);
 }

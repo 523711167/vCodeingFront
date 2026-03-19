@@ -130,7 +130,12 @@ function buildPermissionPayload(claims: OAuthIntrospectionResponse): PermissionP
     // 当前前端只用到了少量按钮权限，因此这里先做一层聚焦映射。
     // 如果后续页面开始直接消费 sys:* 原始权限码，可以在这里改成双写或直接透传。
     buttons: [
+      ...(permissions.includes('sys:user:add') ? ['system:user:create'] : []),
       ...(permissions.includes('sys:user:edit') ? ['system:user:edit'] : []),
+      ...(permissions.includes('sys:user:delete') ? ['system:user:delete'] : []),
+      ...(permissions.includes('sys:user:reset-pwd')
+        ? ['system:user:reset-pwd']
+        : []),
       ...(permissions.includes('sys:role:edit') ? ['system:role:edit'] : []),
       ...(permissions.includes('sys:menu:edit') ? ['system:menu:edit'] : []),
     ],
