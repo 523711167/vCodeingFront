@@ -72,10 +72,20 @@ function buildPermissionPayload(claims: OAuthIntrospectionResponse): PermissionP
   const permissions = claims.permissions ?? [];
   const roles = claims.roles ?? [];
   const isAdmin = roles.includes('ADMIN') || claims.sub === 'admin';
+  const canViewDepts = isAdmin || hasPermissionPrefix(permissions, 'sys:dept:');
   const canViewUsers = isAdmin || hasPermissionPrefix(permissions, 'sys:user:');
   const canViewRoles = isAdmin || hasPermissionPrefix(permissions, 'sys:role:');
   const canViewMenus = isAdmin || hasPermissionPrefix(permissions, 'sys:menu:');
+  const organizationChildren: PermissionMenu[] = [];
   const systemChildren: PermissionMenu[] = [];
+
+  if (canViewDepts) {
+    organizationChildren.push({
+      path: '/organization/depts',
+      title: '组织维护',
+      authCode: 'organization:dept:view',
+    });
+  }
 
   if (canViewUsers) {
     systemChildren.push({
@@ -111,6 +121,16 @@ function buildPermissionPayload(claims: OAuthIntrospectionResponse): PermissionP
         title: '工作台',
         authCode: 'dashboard:view',
       },
+      ...(organizationChildren.length
+        ? [
+            {
+              path: '/organization',
+              title: '组织管理',
+              authCode: 'organization:module:view',
+              children: organizationChildren,
+            },
+          ]
+        : []),
       ...(systemChildren.length
         ? [
             {

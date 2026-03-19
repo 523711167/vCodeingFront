@@ -1,4 +1,5 @@
 import type { MenuRecord } from '@/services/menu.service';
+import type { DeptTreeRecord } from '@/services/dept.service';
 import type { RoleRecord } from '@/services/role.service';
 import type { UserRecord } from '@/services/user.service';
 
@@ -105,6 +106,74 @@ export const mockRoles: RoleRecord[] = [
   },
 ];
 
+// 组织树 mock 数据保持和后端 tree 接口一致，便于前端先把树形交互、详情查看链路跑通。
+export const mockDeptTree: DeptTreeRecord[] = [
+  {
+    id: 1,
+    parentId: 0,
+    name: '总部',
+    code: 'HEAD_OFFICE',
+    path: '/1',
+    level: 1,
+    sortOrder: 1,
+    leaderId: 1,
+    leaderName: '系统管理员',
+    status: 1,
+    statusMsg: '正常',
+    createdAt: '2026-03-18 02:52:20',
+    updatedAt: '2026-03-19 03:41:58',
+    children: [
+      {
+        id: 2,
+        parentId: 1,
+        name: '产品中心',
+        code: 'PRODUCT_CENTER',
+        path: '/1/2',
+        level: 2,
+        sortOrder: 1,
+        leaderId: 2,
+        leaderName: '内容编辑',
+        status: 1,
+        statusMsg: '正常',
+        createdAt: '2026-03-18 09:30:00',
+        updatedAt: '2026-03-19 10:30:00',
+      },
+      {
+        id: 3,
+        parentId: 1,
+        name: '运营中心',
+        code: 'OPERATION_CENTER',
+        path: '/1/3',
+        level: 2,
+        sortOrder: 2,
+        leaderId: 3,
+        leaderName: '活动运营',
+        status: 1,
+        statusMsg: '正常',
+        createdAt: '2026-03-18 10:00:00',
+        updatedAt: '2026-03-19 10:10:00',
+        children: [
+          {
+            id: 4,
+            parentId: 3,
+            name: '华东运营组',
+            code: 'EAST_OPERATION_TEAM',
+            path: '/1/3/4',
+            level: 3,
+            sortOrder: 1,
+            leaderId: 3,
+            leaderName: '活动运营',
+            status: 0,
+            statusMsg: '停用',
+            createdAt: '2026-03-18 11:00:00',
+            updatedAt: '2026-03-18 18:00:00',
+          },
+        ],
+      },
+    ],
+  },
+];
+
 // 菜单树结构和菜单权限页里的 Tree 组件保持一一对应关系。
 export const mockMenuTree: MenuRecord[] = [
   {
@@ -120,6 +189,11 @@ export const mockMenuTree: MenuRecord[] = [
     key: 'operation',
     title: '运营活动',
     children: [{ key: 'operation-list', title: '活动列表' }],
+  },
+  {
+    key: 'organization',
+    title: '组织管理',
+    children: [{ key: 'organization-depts', title: '组织维护' }],
   },
   {
     key: 'system',

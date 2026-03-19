@@ -90,6 +90,13 @@ body {
   gap: 16px;
 }
 
+/* 卡片内的操作区统一右对齐，让“新增”这类主按钮固定落在白色内容区右上角。 */
+.page-container__card-extra {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+}
+
 /* 工具区宽度拉满，方便放搜索栏、筛选项和操作按钮。 */
 .toolbar {
   width: 100%;

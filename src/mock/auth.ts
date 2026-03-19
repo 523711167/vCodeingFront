@@ -44,6 +44,18 @@ export const mockPermissionPayload: PermissionPayload = {
       ],
     },
     {
+      path: '/organization',
+      title: '组织管理',
+      authCode: 'organization:module:view',
+      children: [
+        {
+          path: '/organization/depts',
+          title: '组织维护',
+          authCode: 'organization:dept:view',
+        },
+      ],
+    },
+    {
       path: '/system',
       title: '系统管理',
       authCode: 'system:module:view',

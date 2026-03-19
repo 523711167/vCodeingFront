@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import type { MenuProps } from 'antd';
 import {
+  ApartmentOutlined,
   AppstoreOutlined,
   DashboardOutlined,
   LogoutOutlined,
@@ -25,6 +26,7 @@ const iconMap: Record<string, ReactNode> = {
   dashboard: <DashboardOutlined />,
   content: <ReadOutlined />,
   operation: <NotificationOutlined />,
+  organization: <ApartmentOutlined />,
   system: <AppstoreOutlined />,
   profile: <UserOutlined />,
 };

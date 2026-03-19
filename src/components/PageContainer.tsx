@@ -26,10 +26,12 @@ function PageContainer({
             </Typography.Paragraph>
           )}
         </div>
-        {extra}
       </div>
-      {/* 当前骨架默认用 Card 包裹页面主体，后续如有特殊页面可以不使用该容器。 */}
-      <Card>{children}</Card>
+      {/* 页面操作按钮放进白色卡片内部，是为了让“查询区 + 新增按钮 + 表格区”形成同一块业务区域。 */}
+      <Card>
+        {extra && <div className="page-container__card-extra">{extra}</div>}
+        {children}
+      </Card>
     </Space>
   );
 }

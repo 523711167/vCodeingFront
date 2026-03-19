@@ -6,6 +6,7 @@ import ContentFormPage from '@/pages/content/ContentFormPage';
 import ContentListPage from '@/pages/content/ContentListPage';
 import ForbiddenPage from '@/pages/exception/ForbiddenPage';
 import NotFoundPage from '@/pages/exception/NotFoundPage';
+import DeptManagementPage from '@/pages/organization/DeptManagementPage';
 import OperationFormPage from '@/pages/operation/OperationFormPage';
 import OperationListPage from '@/pages/operation/OperationListPage';
 import ProfilePage from '@/pages/profile/ProfilePage';
@@ -106,6 +107,25 @@ export const businessRoutes: AppRouteItem[] = [
           title: '编辑活动',
           authCode: 'operation:form:view',
           hidden: true,
+        },
+      },
+    ],
+  },
+  {
+    path: '/organization',
+    element: <Navigate replace to="/organization/depts" />,
+    meta: {
+      title: '组织管理',
+      icon: 'organization',
+      authCode: 'organization:module:view',
+    },
+    children: [
+      {
+        path: '/organization/depts',
+        element: <DeptManagementPage />,
+        meta: {
+          title: '组织维护',
+          authCode: 'organization:dept:view',
         },
       },
     ],

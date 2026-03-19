@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import type { RouteObject } from 'react-router-dom';
 import { Navigate, useRoutes } from 'react-router-dom';
-import { filterRoutesByPermissions, flattenRoutes } from '@/features/permission/filterRoutes';
+import { flattenRoutes } from '@/features/permission/filterRoutes';
 import { getDefaultRoutePath } from '@/services/auth.service';
 import MainLayout from '@/layouts/MainLayout';
 import { businessRoutes, publicRoutes } from '@/router/routes';
@@ -34,15 +34,12 @@ function toKnownModuleFallbacks(routes: AppRouteItem[]): RouteObject[] {
 }
 
 function AppRouter() {
-  // routeAuthCodes 由权限 slice 统一维护。
-  // 路由层不直接关心“角色是什么”，只关心最终可访问的权限码集合。
-  const permissionCodes = useAppSelector((state) => state.permission.routeAuthCodes);
   const currentUser = useAppSelector((state) => state.permission.user);
 
-  const allowedBusinessRoutes = useMemo(
-    () => filterRoutesByPermissions(businessRoutes, permissionCodes),
-    [permissionCodes],
-  );
+  // 当前阶段临时取消菜单级权限限制：登录后统一开放业务菜单和路由。
+  // 这样组织管理、系统管理等模块都能直接进入，后续如果要恢复精细权限，
+  // 再把这里切回基于 permissionCodes 的过滤即可。
+  const allowedBusinessRoutes = useMemo(() => businessRoutes, []);
   const defaultRoutePath = getDefaultRoutePath(currentUser);
   const knownModuleFallbacks = useMemo(
     () => toKnownModuleFallbacks(allowedBusinessRoutes),

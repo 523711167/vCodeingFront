@@ -29,6 +29,10 @@ export const API_ENDPOINTS = {
   operation: {
     list: '/activities',
   },
+  dept: {
+    detail: '/sys/dept/detail',
+    tree: '/sys/dept/tree',
+  },
   user: {
     create: '/sys/user/create',
     delete: '/sys/user/delete',
