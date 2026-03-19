@@ -136,7 +136,9 @@ function buildPermissionPayload(claims: OAuthIntrospectionResponse): PermissionP
       ...(permissions.includes('sys:user:reset-pwd')
         ? ['system:user:reset-pwd']
         : []),
+      ...(permissions.includes('sys:role:add') ? ['system:role:create'] : []),
       ...(permissions.includes('sys:role:edit') ? ['system:role:edit'] : []),
+      ...(permissions.includes('sys:role:delete') ? ['system:role:delete'] : []),
       ...(permissions.includes('sys:menu:edit') ? ['system:menu:edit'] : []),
     ],
   };

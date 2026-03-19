@@ -61,9 +61,48 @@ export const mockUsers: UserRecord[] = [
 ];
 
 export const mockRoles: RoleRecord[] = [
-  { id: 'r1', name: '管理员', description: '拥有全部菜单和按钮权限' },
-  { id: 'r2', name: '编辑', description: '负责内容编辑与发布' },
-  { id: 'r3', name: '运营', description: '负责活动创建与运营配置' },
+  {
+    id: 1,
+    name: '系统管理员',
+    code: 'ADMIN',
+    description: '拥有全部菜单和按钮权限',
+    status: 1,
+    statusMsg: '正常',
+    sortOrder: 1,
+    dataScope: 1,
+    dataScopeMsg: '全部数据',
+    createdAt: '2026-03-18 02:52:20',
+    updatedAt: '2026-03-19 03:41:58',
+    customDeptIds: [],
+  },
+  {
+    id: 2,
+    name: '内容编辑',
+    code: 'EDITOR',
+    description: '负责内容编辑与发布',
+    status: 1,
+    statusMsg: '正常',
+    sortOrder: 2,
+    dataScope: 2,
+    dataScopeMsg: '本部门及以下',
+    createdAt: '2026-03-18 09:30:00',
+    updatedAt: '2026-03-19 10:30:00',
+    customDeptIds: [],
+  },
+  {
+    id: 3,
+    name: '活动运营',
+    code: 'OPERATOR',
+    description: '负责活动创建与运营配置',
+    status: 0,
+    statusMsg: '停用',
+    sortOrder: 3,
+    dataScope: 3,
+    dataScopeMsg: '仅本人',
+    createdAt: '2026-03-17 16:00:00',
+    updatedAt: '2026-03-18 18:00:00',
+    customDeptIds: [],
+  },
 ];
 
 // 菜单树结构和菜单权限页里的 Tree 组件保持一一对应关系。

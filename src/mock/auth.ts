@@ -78,8 +78,13 @@ export const mockPermissionPayload: PermissionPayload = {
     'operation:create',
     'operation:edit',
     'operation:delete',
+    'system:user:create',
     'system:user:edit',
+    'system:user:delete',
+    'system:user:reset-pwd',
+    'system:role:create',
     'system:role:edit',
+    'system:role:delete',
     'system:menu:edit',
   ],
 };

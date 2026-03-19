@@ -38,4 +38,12 @@ export const API_ENDPOINTS = {
     update: '/sys/user/update',
     updateStatus: '/sys/user/status/update',
   },
+  role: {
+    create: '/sys/role/create',
+    delete: '/sys/role/delete',
+    detail: '/sys/role/detail',
+    page: '/sys/role/page',
+    update: '/sys/role/update',
+    updateStatus: '/sys/role/status/update',
+  },
 } as const;

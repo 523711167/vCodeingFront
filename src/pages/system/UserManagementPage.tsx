@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ColumnsType } from 'antd/es/table';
 import {
   App as AntdApp,
@@ -81,6 +81,7 @@ function UserManagementPage() {
   const [userForm] = Form.useForm<UserFormValues>();
   const [passwordForm] = Form.useForm<ResetPasswordFormValues>();
   const [query, setQuery] = useState<UserPageQuery>(initialPageQuery);
+  const [reloadVersion, setReloadVersion] = useState(0);
   const [pageData, setPageData] = useState<UserPageResult>({
     pageNum: 1,
     pageSize: 10,
@@ -100,23 +101,35 @@ function UserManagementPage() {
   const [passwordSubmitting, setPasswordSubmitting] = useState(false);
   const [passwordTargetUser, setPasswordTargetUser] = useState<UserRecord | null>(null);
 
-  const loadPage = useEffectEvent(async (nextQuery: UserPageQuery) => {
-    try {
-      setTableLoading(true);
-      setPageData(await fetchUserPage(nextQuery));
-    } catch (error) {
-      // 真接口错误已经在 request 层统一提示，这里只兜底 mock 分支的手动抛错。
-      if (isUserMock && error instanceof Error) {
-        message.error(error.message);
-      }
-    } finally {
-      setTableLoading(false);
-    }
-  });
-
   useEffect(() => {
-    void loadPage(query);
-  }, [query, loadPage]);
+    let canceled = false;
+
+    async function run() {
+      try {
+        setTableLoading(true);
+        const nextPageData = await fetchUserPage(query);
+
+        if (!canceled) {
+          setPageData(nextPageData);
+        }
+      } catch (error) {
+        // 真接口错误已经在 request 层统一提示，这里只兜底 mock 分支的手动抛错。
+        if (!canceled && isUserMock && error instanceof Error) {
+          message.error(error.message);
+        }
+      } finally {
+        if (!canceled) {
+          setTableLoading(false);
+        }
+      }
+    }
+
+    void run();
+
+    return () => {
+      canceled = true;
+    };
+  }, [message, query, reloadVersion]);
 
   async function loadDetail(userId: number, openDrawer = true) {
     try {
@@ -139,10 +152,17 @@ function UserManagementPage() {
   function triggerReload(pageNum = query.pageNum) {
     // 统一通过 query 变更触发重载，是为了把分页、筛选、增删改后的刷新入口
     // 收口到同一条 useEffect 链路，避免页面里散落多个独立请求。
-    setQuery((previousQuery) => ({
-      ...previousQuery,
-      pageNum,
-    }));
+    if (query.pageNum === pageNum) {
+      setReloadVersion((previousVersion) => previousVersion + 1);
+      return;
+    }
+
+    setQuery((previousQuery) => {
+      return {
+        ...previousQuery,
+        pageNum,
+      };
+    });
   }
 
   async function openCreateModal() {
@@ -408,7 +428,11 @@ function UserManagementPage() {
           onFinish={(values) => {
             setQuery((previousQuery) => ({
               ...previousQuery,
-              pageNum: 1,
+              pageNum:
+                previousQuery.username === (values.username?.trim() || undefined) &&
+                previousQuery.status === values.status
+                  ? previousQuery.pageNum
+                  : 1,
               status: values.status,
               username: values.username?.trim() || undefined,
             }));
@@ -457,11 +481,20 @@ function UserManagementPage() {
           pagination={{
             current: query.pageNum,
             onChange: (pageNum, pageSize) => {
-              setQuery((previousQuery) => ({
-                ...previousQuery,
-                pageNum,
-                pageSize,
-              }));
+              setQuery((previousQuery) => {
+                if (
+                  previousQuery.pageNum === pageNum &&
+                  previousQuery.pageSize === pageSize
+                ) {
+                  return previousQuery;
+                }
+
+                return {
+                  ...previousQuery,
+                  pageNum,
+                  pageSize,
+                };
+              });
             },
             pageSize: query.pageSize,
             showSizeChanger: true,
