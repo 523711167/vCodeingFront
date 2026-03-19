@@ -1,4 +1,4 @@
-import { type ReactNode, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import type { MenuProps } from 'antd';
 import {
   AppstoreOutlined,
@@ -10,7 +10,7 @@ import {
   ReadOutlined,
   UserOutlined,
 } from '@ant-design/icons';
-import { Avatar, Breadcrumb, Button, Layout, Menu, Space, Typography } from 'antd';
+import { App as AntdApp, Avatar, Breadcrumb, Button, Layout, Menu, Space, Typography } from 'antd';
 import { Outlet, matchPath, useLocation, useNavigate } from 'react-router-dom';
 import { logout } from '@/services/auth.service';
 import type { AppRouteItem } from '@/router/types';
@@ -84,7 +84,15 @@ interface MainLayoutProps {
   routes: AppRouteItem[];
 }
 
+interface FlashMessageState {
+  flashMessage?: {
+    content: string;
+    type: 'success' | 'info' | 'warning' | 'error';
+  };
+}
+
 function MainLayout({ routes }: MainLayoutProps) {
+  const { message } = AntdApp.useApp();
   const navigate = useNavigate();
   const location = useLocation();
   const dispatch = useAppDispatch();
@@ -92,6 +100,7 @@ function MainLayout({ routes }: MainLayoutProps) {
   const [openKeys, setOpenKeys] = useState<string[]>([]);
   const collapsed = useAppSelector((state) => state.app.siderCollapsed);
   const user = useAppSelector((state) => state.permission.user);
+  const flashState = location.state as FlashMessageState | null;
 
   // 菜单项和面包屑都从同一份 routes 推导，避免页面标题和菜单结构各维护一套配置。
   const menuItems = useMemo(() => toMenuItems(routes), [routes]);
@@ -114,6 +123,27 @@ function MainLayout({ routes }: MainLayoutProps) {
 
     return matched.length ? matched : [location.pathname];
   }, [location.pathname, routes]);
+
+  useEffect(() => {
+    if (!flashState?.flashMessage) {
+      return;
+    }
+
+    // 闪现消息在目标页展示一次后立刻清掉路由 state，
+    // 这样刷新页面或再次切换菜单时不会重复弹出旧提示。
+    message.open(flashState.flashMessage);
+    navigate(`${location.pathname}${location.search}${location.hash}`, {
+      replace: true,
+      state: null,
+    });
+  }, [
+    flashState,
+    location.hash,
+    location.pathname,
+    location.search,
+    message,
+    navigate,
+  ]);
 
   const handleLogout = async () => {
     // 退出时先尽量通知后端撤销当前 access_token，再回收本地状态。

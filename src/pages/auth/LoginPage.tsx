@@ -1,4 +1,4 @@
-import { message, Alert, Button, Card, Form, Input, Space, Typography } from 'antd';
+import { App as AntdApp, Alert, Button, Card, Form, Input, Space, Typography } from 'antd';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   getDefaultRoutePath,
@@ -21,6 +21,13 @@ interface LoginRouteState {
   };
 }
 
+interface LoginSuccessFlashState {
+  flashMessage?: {
+    content: string;
+    type: 'success';
+  };
+}
+
 function getLoginSuccessTarget(
   routeState: LoginRouteState | null,
   fallbackPath: string,
@@ -37,6 +44,7 @@ function getLoginSuccessTarget(
 }
 
 function LoginPage() {
+  const { message } = AntdApp.useApp();
   const navigate = useNavigate();
   const location = useLocation();
   const dispatch = useAppDispatch();
@@ -53,13 +61,22 @@ function LoginPage() {
       const loginResult = await login(values);
       dispatch(setAuthSession(loginResult.session));
       dispatch(setPermissionPayload(loginResult.permissionPayload));
-      message.success('登录成功，欢迎回来');
       navigate(
         getLoginSuccessTarget(
           routeState,
           getDefaultRoutePath(loginResult.permissionPayload),
         ),
-        { replace: true },
+        {
+          replace: true,
+          // 成功提示跟随路由一起带到目标页展示，
+          // 避免当前页刚调用 message 就立刻跳转，导致用户看不到提示。
+          state: {
+            flashMessage: {
+              content: '登录成功，欢迎回来',
+              type: 'success',
+            },
+          } satisfies LoginSuccessFlashState,
+        },
       );
     } catch (error) {
       message.error(

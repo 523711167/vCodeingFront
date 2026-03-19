@@ -1,4 +1,5 @@
 import axios from 'axios';
+import type { AxiosRequestConfig } from 'axios';
 import { API_BASE_URLS, API_ENDPOINTS } from '@/services/api-endpoints';
 
 export interface OAuthTokenResponse {
@@ -30,6 +31,13 @@ export interface OAuthIntrospectionResponse {
   user_id?: string;
 }
 
+interface OAuthWrappedErrorResponse {
+  code?: number;
+  data?: unknown;
+  message?: string;
+  msg?: string;
+}
+
 const oauthHttp = axios.create({
   // OAuth2 地址独立配置，避免后续业务 API 走网关或不同前缀时影响登录链路。
   baseURL: API_BASE_URLS.oauth,
@@ -55,9 +63,56 @@ function buildFormBody(payload: Record<string, string>) {
   return params;
 }
 
+function isOAuthWrappedErrorResponse(
+  payload: unknown,
+): payload is OAuthWrappedErrorResponse {
+  return typeof payload === 'object' && payload !== null && 'code' in payload;
+}
+
+async function requestOAuthPayload<T>(
+  config: AxiosRequestConfig,
+  isSuccessPayload: (payload: unknown) => payload is T,
+) {
+  const response = await oauthHttp.request<unknown>(config);
+  const payload = response.data;
+
+  if (isSuccessPayload(payload)) {
+    return payload;
+  }
+
+  // OAuth2 接口在当前后端里并不总是使用 HTTP 状态码表达失败，
+  // 有些失败会返回 200 + { code, msg, data }。这里统一把它收敛成 Error，
+  // 让登录页的 message.error 能直接展示后端返回的业务文案。
+  if (isOAuthWrappedErrorResponse(payload)) {
+    throw new Error(payload.msg || payload.message || '认证请求失败');
+  }
+
+  throw new Error('认证响应格式不正确');
+}
+
+function isOAuthTokenResponse(payload: unknown): payload is OAuthTokenResponse {
+  return (
+    typeof payload === 'object' &&
+    payload !== null &&
+    'access_token' in payload &&
+    typeof payload.access_token === 'string'
+  );
+}
+
+function isOAuthIntrospectionResponse(
+  payload: unknown,
+): payload is OAuthIntrospectionResponse {
+  return (
+    typeof payload === 'object' &&
+    payload !== null &&
+    'active' in payload &&
+    typeof payload.active === 'boolean'
+  );
+}
+
 export async function requestPasswordToken(username: string, password: string) {
-  return oauthHttp
-    .request<OAuthTokenResponse>({
+  return requestOAuthPayload(
+    {
       method: 'post',
       url: API_ENDPOINTS.oauth.token,
       data: buildFormBody({
@@ -70,13 +125,14 @@ export async function requestPasswordToken(username: string, password: string) {
         Authorization: buildClientAuthorizationHeader(),
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-    })
-    .then((response) => response.data);
+    },
+    isOAuthTokenResponse,
+  );
 }
 
 export async function requestRefreshToken(refreshToken: string) {
-  return oauthHttp
-    .request<OAuthTokenResponse>({
+  return requestOAuthPayload(
+    {
       method: 'post',
       url: API_ENDPOINTS.oauth.token,
       data: buildFormBody({
@@ -88,13 +144,14 @@ export async function requestRefreshToken(refreshToken: string) {
         Authorization: buildClientAuthorizationHeader(),
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-    })
-    .then((response) => response.data);
+    },
+    isOAuthTokenResponse,
+  );
 }
 
 export async function introspectToken(token: string) {
-  return oauthHttp
-    .request<OAuthIntrospectionResponse>({
+  return requestOAuthPayload(
+    {
       method: 'post',
       url: API_ENDPOINTS.oauth.introspect,
       data: buildFormBody({ token }),
@@ -102,8 +159,9 @@ export async function introspectToken(token: string) {
         Authorization: buildClientAuthorizationHeader(),
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-    })
-    .then((response) => response.data);
+    },
+    isOAuthIntrospectionResponse,
+  );
 }
 
 export async function revokeToken(token: string) {
