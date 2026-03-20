@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent } from 'react';
+import { useEffect, useMemo, useState, type MouseEvent } from 'react';
 import type { ColumnsType } from 'antd/es/table';
 import {
   App as AntdApp,
@@ -18,6 +18,7 @@ import PageContainer from '@/components/PageContainer';
 import PermissionButton from '@/components/PermissionButton';
 import type { DeptTreeRecord } from '@/services/dept.service';
 import { fetchDeptTree } from '@/services/dept.service';
+import { showErrorMessageOnce } from '@/services/error-message';
 import { fetchRoleList, type RoleRecord } from '@/services/role.service';
 import {
   createUser,
@@ -37,10 +38,6 @@ import {
   type UserPageResult,
   type UserRecord,
 } from '@/services/user.service';
-
-const isUserMock = import.meta.env.VITE_USE_USER_MOCK
-  ? import.meta.env.VITE_USE_USER_MOCK !== 'false'
-  : import.meta.env.VITE_USE_MOCK !== 'false';
 
 interface SearchFormValues {
   username?: string;
@@ -289,6 +286,7 @@ function UserManagementPage() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorLoading, setEditorLoading] = useState(false);
   const [editorSubmitting, setEditorSubmitting] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [passwordSubmitting, setPasswordSubmitting] = useState(false);
@@ -324,6 +322,18 @@ function UserManagementPage() {
   const selectedDeptOptions = deptFlatOptions.filter((option) =>
     selectedDeptIds.includes(option.value),
   );
+  // 删除按钮移到工具栏后，需要维护当前页的单个选中用户。
+  // 这里故意只从当前页数据里取值，避免分页切换后顶部按钮仍指向旧页记录。
+  const selectedUserRecord = useMemo(
+    () => pageData.records.find((record) => record.id === selectedUserId) ?? null,
+    [pageData.records, selectedUserId],
+  );
+
+  useEffect(() => {
+    if (selectedUserId && !pageData.records.some((record) => record.id === selectedUserId)) {
+      setSelectedUserId(null);
+    }
+  }, [pageData.records, selectedUserId]);
 
   useEffect(() => {
     let canceled = false;
@@ -337,9 +347,8 @@ function UserManagementPage() {
           setPageData(nextPageData);
         }
       } catch (error) {
-        // 真接口错误已经在 request 层统一提示，这里只兜底 mock 分支的手动抛错。
-        if (!canceled && isUserMock && error instanceof Error) {
-          message.error(error.message);
+        if (!canceled) {
+          showErrorMessageOnce(error, '用户列表加载失败');
         }
       } finally {
         if (!canceled) {
@@ -368,8 +377,8 @@ function UserManagementPage() {
           setDeptTreeData(deptTree);
         }
       } catch (error) {
-        if (!canceled && isUserMock && error instanceof Error) {
-          message.error(error.message);
+        if (!canceled) {
+          showErrorMessageOnce(error, '组织树加载失败');
         }
       }
     }
@@ -391,9 +400,7 @@ function UserManagementPage() {
         setDetailOpen(true);
       }
     } catch (error) {
-      if (isUserMock && error instanceof Error) {
-        message.error(error.message);
-      }
+      showErrorMessageOnce(error, '用户详情加载失败');
     } finally {
       setDetailLoading(false);
     }
@@ -436,9 +443,7 @@ function UserManagementPage() {
       });
       setEditorOpen(true);
     } catch (error) {
-      if (isUserMock && error instanceof Error) {
-        message.error(error.message);
-      }
+      showErrorMessageOnce(error, '用户详情加载失败');
     } finally {
       setEditorLoading(false);
     }
@@ -478,9 +483,7 @@ function UserManagementPage() {
       userForm.resetFields();
       triggerReload(editingUserId ? query.pageNum : 1);
     } catch (error) {
-      if (isUserMock && error instanceof Error) {
-        message.error(error.message);
-      }
+      showErrorMessageOnce(error, editingUserId ? '用户修改失败' : '用户新增失败');
     } finally {
       setEditorSubmitting(false);
     }
@@ -506,9 +509,7 @@ function UserManagementPage() {
             void loadDetail(record.id, false);
           }
         } catch (error) {
-          if (isUserMock && error instanceof Error) {
-            message.error(error.message);
-          }
+          showErrorMessageOnce(error, '用户状态更新失败');
         }
       },
     });
@@ -539,9 +540,7 @@ function UserManagementPage() {
       });
       setRoleBindingOpen(true);
     } catch (error) {
-      if (isUserMock && error instanceof Error) {
-        message.error(error.message);
-      }
+      showErrorMessageOnce(error, '角色关联数据加载失败');
     } finally {
       setRoleBindingLoading(false);
     }
@@ -562,9 +561,7 @@ function UserManagementPage() {
       setPasswordOpen(false);
       passwordForm.resetFields();
     } catch (error) {
-      if (isUserMock && error instanceof Error) {
-        message.error(error.message);
-      }
+      showErrorMessageOnce(error, '密码重置失败');
     } finally {
       setPasswordSubmitting(false);
     }
@@ -593,9 +590,7 @@ function UserManagementPage() {
         void loadDetail(payload.userId, false);
       }
     } catch (error) {
-      if (isUserMock && error instanceof Error) {
-        message.error(error.message);
-      }
+      showErrorMessageOnce(error, '用户角色关联失败');
     } finally {
       setRoleBindingSubmitting(false);
     }
@@ -613,6 +608,9 @@ function UserManagementPage() {
         try {
           await deleteUsers({ idList: [record.id] });
           message.success('用户删除成功');
+          setSelectedUserId((currentSelectedUserId) =>
+            currentSelectedUserId === record.id ? null : currentSelectedUserId,
+          );
 
           if (detailRecord?.id === record.id) {
             setDetailOpen(false);
@@ -624,9 +622,7 @@ function UserManagementPage() {
 
           triggerReload(shouldFallbackToPreviousPage ? query.pageNum - 1 : query.pageNum);
         } catch (error) {
-          if (isUserMock && error instanceof Error) {
-            message.error(error.message);
-          }
+          showErrorMessageOnce(error, '用户删除失败');
         }
       },
     });
@@ -653,9 +649,7 @@ function UserManagementPage() {
       });
       setDeptBindingOpen(true);
     } catch (error) {
-      if (isUserMock && error instanceof Error) {
-        message.error(error.message);
-      }
+      showErrorMessageOnce(error, '组织关联数据加载失败');
     } finally {
       setDeptBindingLoading(false);
     }
@@ -741,9 +735,7 @@ function UserManagementPage() {
         void loadDetail(payload.userId, false);
       }
     } catch (error) {
-      if (isUserMock && error instanceof Error) {
-        message.error(error.message);
-      }
+      showErrorMessageOnce(error, '用户组织关联失败');
     } finally {
       setDeptBindingSubmitting(false);
     }
@@ -839,15 +831,6 @@ function UserManagementPage() {
           >
             重置密码
           </PermissionButton>
-          <PermissionButton
-            danger
-            onClick={() => void handleDeleteUser(record)}
-            permissionCode="system:user:delete"
-            size="small"
-            type="link"
-          >
-            删除
-          </PermissionButton>
         </Space>
       ),
     },
@@ -914,13 +897,30 @@ function UserManagementPage() {
           </Form>
           {/* 系统管理列表页把“查询区 + 新增按钮”收口到同一行，
               是为了统一后台主操作入口的位置；后续其他管理页也直接复用这套结构。 */}
-          <PermissionButton
-            onClick={() => void openCreateModal()}
-            permissionCode="system:user:create"
-            type="primary"
-          >
-            新增用户
-          </PermissionButton>
+          <Space>
+            <PermissionButton
+              onClick={() => void openCreateModal()}
+              permissionCode="system:user:create"
+              type="primary"
+            >
+              新增用户
+            </PermissionButton>
+            <PermissionButton
+              danger
+              disabled={!selectedUserRecord}
+              onClick={() => {
+                if (!selectedUserRecord) {
+                  message.warning('请先选择一条用户数据');
+                  return;
+                }
+
+                void handleDeleteUser(selectedUserRecord);
+              }}
+              permissionCode="system:user:delete"
+            >
+              删除用户
+            </PermissionButton>
+          </Space>
         </div>
 
         <Table
@@ -949,7 +949,21 @@ function UserManagementPage() {
             showSizeChanger: true,
             total: pageData.total,
           }}
+          // 顶部删除按钮只处理一个明确目标，因此这里使用单选模式。
+          rowSelection={{
+            selectedRowKeys: selectedUserId ? [selectedUserId] : [],
+            type: 'radio',
+            onChange: (selectedRowKeys) => {
+              const nextSelectedKey = selectedRowKeys[0];
+              setSelectedUserId(typeof nextSelectedKey === 'number' ? nextSelectedKey : null);
+            },
+          }}
           rowKey="id"
+          onRow={(record) => ({
+            onClick: () => {
+              setSelectedUserId(record.id);
+            },
+          })}
         />
       </Space>
 

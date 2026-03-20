@@ -36,6 +36,13 @@ export const API_ENDPOINTS = {
     tree: '/sys/dept/tree',
     update: '/sys/dept/update',
   },
+  menu: {
+    create: '/sys/menu/create',
+    delete: '/sys/menu/delete',
+    detail: '/sys/menu/detail',
+    tree: '/sys/menu/tree',
+    update: '/sys/menu/update',
+  },
   user: {
     create: '/sys/user/create',
     delete: '/sys/user/delete',

@@ -72,7 +72,7 @@ export const mockPermissionPayload: PermissionPayload = {
         },
         {
           path: '/system/menus',
-          title: '菜单权限',
+          title: '菜单管理',
           authCode: 'system:menu:view',
         },
       ],

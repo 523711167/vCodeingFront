@@ -3,9 +3,9 @@ import axios, {
   AxiosHeaders,
   type AxiosRequestConfig,
 } from 'axios';
-import { message } from 'antd';
 import { API_BASE_URLS } from '@/services/api-endpoints';
 import { refreshCurrentSession } from '@/services/auth.service';
+import { showErrorMessageOnce } from '@/services/error-message';
 import { clearAuth } from '@/store/slices/authSlice';
 import { clearPermission } from '@/store/slices/permissionSlice';
 import { store } from '@/store';
@@ -85,7 +85,7 @@ http.interceptors.response.use(
       } catch {
         store.dispatch(clearAuth());
         store.dispatch(clearPermission());
-        message.error('登录状态已失效，请重新登录');
+        showErrorMessageOnce(new Error('登录状态已失效，请重新登录'));
       } finally {
         refreshingPromise = null;
       }
@@ -93,7 +93,8 @@ http.interceptors.response.use(
 
     // 这里兜底的是“网络层错误”，例如超时、断网、网关异常。
     // 业务错误码在 request<T> 里统一处理。
-    message.error(
+    showErrorMessageOnce(
+      error,
       error.response?.data?.message ??
         error.response?.data?.msg ??
         '网络请求失败，请稍后重试',
@@ -119,6 +120,8 @@ export async function request<T>(config: AxiosRequestConfig) {
     store.dispatch(clearPermission());
   }
 
-  message.error(resultMessage);
-  throw new Error(resultMessage);
+  const requestError = new Error(resultMessage);
+
+  showErrorMessageOnce(requestError, resultMessage);
+  throw requestError;
 }

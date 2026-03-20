@@ -20,6 +20,7 @@ import {
   ORG_TYPE_OPTIONS,
   type OrgTypeCode,
 } from '@/constants/select-options';
+import { showErrorMessageOnce } from '@/services/error-message';
 import {
   createDept,
   deleteDepts,
@@ -56,16 +57,15 @@ function collectExpandedRowKeys(nodes: DeptTreeRecord[]): number[] {
   ]);
 }
 
-function getStatusTagColor(status: number) {
-  return status === 1 ? 'green' : 'default';
+function flattenDeptTree(nodes: DeptTreeRecord[]): DeptTreeRecord[] {
+  return nodes.flatMap((node) => [
+    node,
+    ...flattenDeptTree(node.children ?? []),
+  ]);
 }
 
-function getActionErrorMessage(error: unknown, fallbackMessage = '操作失败，请稍后重试') {
-  if (error instanceof Error) {
-    return error.message || fallbackMessage;
-  }
-
-  return fallbackMessage;
+function getStatusTagColor(status: number) {
+  return status === 1 ? 'green' : 'default';
 }
 
 function toTreeSelectData(nodes: DeptTreeRecord[]): DeptTreeSelectNode[] {
@@ -94,9 +94,21 @@ function DeptManagementPage() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorSubmitting, setEditorSubmitting] = useState(false);
   const [editingDeptId, setEditingDeptId] = useState<number | null>(null);
+  const [selectedDeptId, setSelectedDeptId] = useState<number | null>(null);
   const [allDeptTree, setAllDeptTree] = useState<DeptTreeRecord[]>([]);
   const [tableData, setTableData] = useState<DeptTreeRecord[]>([]);
   const [expandedRowKeys, setExpandedRowKeys] = useState<number[]>([]);
+  // 组织删除挪到顶部工具栏后，需要从当前树表格里解析出唯一选中节点。
+  const selectedDeptRecord = useMemo(
+    () => flattenDeptTree(tableData).find((record) => record.id === selectedDeptId) ?? null,
+    [selectedDeptId, tableData],
+  );
+
+  useEffect(() => {
+    if (selectedDeptId && !flattenDeptTree(tableData).some((record) => record.id === selectedDeptId)) {
+      setSelectedDeptId(null);
+    }
+  }, [selectedDeptId, tableData]);
 
   useEffect(() => {
     let canceled = false;
@@ -114,7 +126,7 @@ function DeptManagementPage() {
         }
       } catch (error) {
         if (!canceled) {
-          message.error(getActionErrorMessage(error, '组织列表加载失败'));
+          showErrorMessageOnce(error, '组织列表加载失败');
         }
       } finally {
         if (!canceled) {
@@ -144,7 +156,7 @@ function DeptManagementPage() {
         }
       } catch (error) {
         if (!canceled) {
-          message.error(getActionErrorMessage(error, '组织树选项加载失败'));
+          showErrorMessageOnce(error, '组织树选项加载失败');
         }
       }
     }
@@ -170,7 +182,7 @@ function DeptManagementPage() {
     } catch (error) {
       setDetailOpen(false);
       setDetailRecord(null);
-      message.error(getActionErrorMessage(error, '组织详情加载失败'));
+      showErrorMessageOnce(error, '组织详情加载失败');
     } finally {
       setDetailLoading(false);
     }
@@ -203,7 +215,7 @@ function DeptManagementPage() {
       });
       setEditorOpen(true);
     } catch (error) {
-      message.error(getActionErrorMessage(error, '组织详情加载失败'));
+      showErrorMessageOnce(error, '组织详情加载失败');
     }
   }
 
@@ -245,9 +257,7 @@ function DeptManagementPage() {
       deptForm.resetFields();
       triggerReload();
     } catch (error) {
-      message.error(
-        getActionErrorMessage(error, editingDeptId ? '组织修改失败' : '组织新增失败'),
-      );
+      showErrorMessageOnce(error, editingDeptId ? '组织修改失败' : '组织新增失败');
     } finally {
       setEditorSubmitting(false);
     }
@@ -270,6 +280,9 @@ function DeptManagementPage() {
         try {
           await deleteDepts({ id: record.id });
           message.success('组织删除成功');
+          setSelectedDeptId((currentSelectedDeptId) =>
+            currentSelectedDeptId === record.id ? null : currentSelectedDeptId,
+          );
 
           if (detailRecord?.id === record.id) {
             setDetailOpen(false);
@@ -278,7 +291,7 @@ function DeptManagementPage() {
 
           triggerReload();
         } catch (error) {
-          message.error(getActionErrorMessage(error, '组织删除失败'));
+          showErrorMessageOnce(error, '组织删除失败');
         }
       },
     });
@@ -344,14 +357,6 @@ function DeptManagementPage() {
           <Button onClick={() => void openEditModal(record)} size="small" type="link">
             编辑
           </Button>
-          <Button
-            danger
-            onClick={() => void handleDeleteDept(record)}
-            size="small"
-            type="link"
-          >
-            删除
-          </Button>
         </Space>
       ),
     },
@@ -359,13 +364,27 @@ function DeptManagementPage() {
 
   return (
     <PageContainer
-      description="组织维护页当前采用树形表格展示组织结构，详情通过按钮弹框查看，编辑和删除统一收口在操作列。"
+      description="组织维护页当前采用树形表格展示组织结构，详情通过按钮弹框查看，编辑保留在操作列，删除收口到顶部工具栏。"
       title="组织维护"
     >
       <Space className="toolbar" direction="vertical" size={16}>
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <Button onClick={() => void openCreateModal()} type="primary">
             新增组织
+          </Button>
+          <Button
+            danger
+            disabled={!selectedDeptRecord}
+            onClick={() => {
+              if (!selectedDeptRecord) {
+                message.warning('请先选择一条组织数据');
+                return;
+              }
+
+              void handleDeleteDept(selectedDeptRecord);
+            }}
+          >
+            删除组织
           </Button>
         </div>
 
@@ -380,7 +399,21 @@ function DeptManagementPage() {
           }}
           loading={tableLoading}
           pagination={false}
+          // 顶部删除只处理一个节点，因此树表格改成单选。
+          rowSelection={{
+            selectedRowKeys: selectedDeptId ? [selectedDeptId] : [],
+            type: 'radio',
+            onChange: (selectedRowKeys) => {
+              const nextSelectedKey = selectedRowKeys[0];
+              setSelectedDeptId(typeof nextSelectedKey === 'number' ? nextSelectedKey : null);
+            },
+          }}
           rowKey="id"
+          onRow={(record) => ({
+            onClick: () => {
+              setSelectedDeptId(record.id);
+            },
+          })}
         />
       </Space>
 

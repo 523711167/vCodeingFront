@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent } from 'react';
+import { useEffect, useMemo, useState, type MouseEvent } from 'react';
 import type { ColumnsType } from 'antd/es/table';
 import {
   App as AntdApp,
@@ -23,6 +23,7 @@ import {
   type DataScopeCode,
 } from '@/constants/select-options';
 import { fetchDeptTree, type DeptTreeRecord } from '@/services/dept.service';
+import { showErrorMessageOnce } from '@/services/error-message';
 import {
   createRole,
   deleteRoles,
@@ -38,12 +39,6 @@ import {
   type UpdateRoleDataScopePayload,
   type UpdateRolePayload,
 } from '@/services/role.service';
-
-const isRoleMock = import.meta.env.VITE_USE_ROLE_MOCK
-  ? import.meta.env.VITE_USE_ROLE_MOCK !== 'false'
-  : import.meta.env.VITE_USE_USER_MOCK
-    ? import.meta.env.VITE_USE_USER_MOCK !== 'false'
-    : import.meta.env.VITE_USE_MOCK !== 'false';
 
 interface SearchFormValues {
   name?: string;
@@ -66,6 +61,7 @@ interface RoleDataScopeFormValues {
 interface DeptTreeSelectOption {
   title: string;
   value: number;
+  disabled?: boolean;
   children?: DeptTreeSelectOption[];
 }
 
@@ -78,12 +74,25 @@ function getStatusTagColor(status: number) {
   return status === 1 ? 'green' : 'default';
 }
 
-function buildDeptTreeSelectData(nodes: DeptTreeRecord[]): DeptTreeSelectOption[] {
+function buildDeptTreeSelectData(
+  nodes: DeptTreeRecord[],
+  disabledDeptIds: Set<number>,
+): DeptTreeSelectOption[] {
   return nodes.map((node) => ({
     title: node.name,
     value: node.id,
-    children: node.children ? buildDeptTreeSelectData(node.children) : undefined,
+    disabled: disabledDeptIds.has(node.id),
+    children: node.children
+      ? buildDeptTreeSelectData(node.children, disabledDeptIds)
+      : undefined,
   }));
+}
+
+function flattenDeptTree(nodes: DeptTreeRecord[]): DeptTreeRecord[] {
+  return nodes.flatMap((node) => [
+    node,
+    ...flattenDeptTree(node.children ?? []),
+  ]);
 }
 
 function buildDeptPathLabelMap(
@@ -102,6 +111,112 @@ function buildDeptPathLabelMap(
   });
 
   return labelMap;
+}
+
+function buildDeptParentIdMap(
+  nodes: DeptTreeRecord[],
+  parentIdMap = new Map<number, number>(),
+) {
+  nodes.forEach((node) => {
+    parentIdMap.set(node.id, node.parentId);
+
+    if (node.children?.length) {
+      buildDeptParentIdMap(node.children, parentIdMap);
+    }
+  });
+
+  return parentIdMap;
+}
+
+function buildDeptDescendantIdsMap(
+  nodes: DeptTreeRecord[],
+  descendantIdsMap = new Map<number, number[]>(),
+) {
+  nodes.forEach((node) => {
+    const descendantIds = flattenDeptTree(node.children ?? []).map((child) => child.id);
+
+    descendantIdsMap.set(node.id, descendantIds);
+
+    if (node.children?.length) {
+      buildDeptDescendantIdsMap(node.children, descendantIdsMap);
+    }
+  });
+
+  return descendantIdsMap;
+}
+
+function collectAncestorDeptIds(
+  deptId: number,
+  parentIdMap: Map<number, number>,
+) {
+  const ancestorIds: number[] = [];
+  let currentParentId = parentIdMap.get(deptId);
+
+  while (typeof currentParentId === 'number' && currentParentId > 0) {
+    ancestorIds.push(currentParentId);
+    currentParentId = parentIdMap.get(currentParentId);
+  }
+
+  return ancestorIds;
+}
+
+function hasSelectedAncestorDept(
+  deptId: number,
+  selectedDeptIds: number[],
+  parentIdMap: Map<number, number>,
+) {
+  return collectAncestorDeptIds(deptId, parentIdMap).some((ancestorId) =>
+    selectedDeptIds.includes(ancestorId),
+  );
+}
+
+function normalizeSelectedDeptIds(
+  nextDeptIds: number[],
+  previousDeptIds: number[],
+  parentIdMap: Map<number, number>,
+  descendantIdsMap: Map<number, number[]>,
+) {
+  let normalizedDeptIds = previousDeptIds.filter((deptId) => nextDeptIds.includes(deptId));
+  const addedDeptIds = nextDeptIds.filter((deptId) => !previousDeptIds.includes(deptId));
+
+  addedDeptIds.forEach((deptId) => {
+    if (hasSelectedAncestorDept(deptId, normalizedDeptIds, parentIdMap)) {
+      return;
+    }
+
+    const descendantDeptIds = descendantIdsMap.get(deptId) ?? [];
+
+    normalizedDeptIds = normalizedDeptIds.filter(
+      (selectedDeptId) => !descendantDeptIds.includes(selectedDeptId),
+    );
+    normalizedDeptIds.push(deptId);
+  });
+
+  return normalizedDeptIds;
+}
+
+function buildDisabledDeptIds(
+  selectedDeptIds: number[],
+  parentIdMap: Map<number, number>,
+  descendantIdsMap: Map<number, number[]>,
+) {
+  const disabledDeptIds = new Set<number>();
+
+  selectedDeptIds.forEach((deptId) => {
+    collectAncestorDeptIds(deptId, parentIdMap).forEach((ancestorId) => {
+      disabledDeptIds.add(ancestorId);
+    });
+
+    (descendantIdsMap.get(deptId) ?? []).forEach((descendantId) => {
+      disabledDeptIds.add(descendantId);
+    });
+  });
+
+  selectedDeptIds.forEach((deptId) => {
+    disabledDeptIds.delete(deptId);
+  });
+
+  return disabledDeptIds;
 }
 
 function RoleManagementPage() {
@@ -125,6 +240,7 @@ function RoleManagementPage() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorLoading, setEditorLoading] = useState(false);
   const [editorSubmitting, setEditorSubmitting] = useState(false);
+  const [selectedRoleId, setSelectedRoleId] = useState<number | null>(null);
   const [editingRoleId, setEditingRoleId] = useState<number | null>(null);
   const [dataScopeOpen, setDataScopeOpen] = useState(false);
   const [dataScopeLoading, setDataScopeLoading] = useState(false);
@@ -132,7 +248,26 @@ function RoleManagementPage() {
   const [dataScopeTargetRole, setDataScopeTargetRole] = useState<RoleRecord | null>(null);
   const [deptTreeData, setDeptTreeData] = useState<DeptTreeRecord[]>([]);
   const selectedDataScope = Form.useWatch('dataScope', dataScopeForm);
+  const selectedDeptIds = Form.useWatch('deptIds', dataScopeForm) ?? [];
   const deptPathLabelMap = buildDeptPathLabelMap(deptTreeData);
+  const deptParentIdMap = buildDeptParentIdMap(deptTreeData);
+  const deptDescendantIdsMap = buildDeptDescendantIdsMap(deptTreeData);
+  const disabledDeptIds = buildDisabledDeptIds(
+    selectedDeptIds,
+    deptParentIdMap,
+    deptDescendantIdsMap,
+  );
+  // 顶部删除按钮与表格单选联动，避免角色列表出现多个删除入口时误操作。
+  const selectedRoleRecord = useMemo(
+    () => pageData.records.find((record) => record.id === selectedRoleId) ?? null,
+    [pageData.records, selectedRoleId],
+  );
+
+  useEffect(() => {
+    if (selectedRoleId && !pageData.records.some((record) => record.id === selectedRoleId)) {
+      setSelectedRoleId(null);
+    }
+  }, [pageData.records, selectedRoleId]);
 
   useEffect(() => {
     let canceled = false;
@@ -146,9 +281,8 @@ function RoleManagementPage() {
           setPageData(nextPageData);
         }
       } catch (error) {
-        // 真接口分支已经在 request 层做统一提示，这里只给 mock 分支兜底。
-        if (!canceled && isRoleMock && error instanceof Error) {
-          message.error(error.message);
+        if (!canceled) {
+          showErrorMessageOnce(error, '角色列表加载失败');
         }
       } finally {
         if (!canceled) {
@@ -177,8 +311,8 @@ function RoleManagementPage() {
           setDeptTreeData(deptTree);
         }
       } catch (error) {
-        if (!canceled && isRoleMock && error instanceof Error) {
-          message.error(error.message);
+        if (!canceled) {
+          showErrorMessageOnce(error, '组织树加载失败');
         }
       }
     }
@@ -200,9 +334,7 @@ function RoleManagementPage() {
         setDetailOpen(true);
       }
     } catch (error) {
-      if (isRoleMock && error instanceof Error) {
-        message.error(error.message);
-      }
+      showErrorMessageOnce(error, '角色详情加载失败');
     } finally {
       setDetailLoading(false);
     }
@@ -244,9 +376,7 @@ function RoleManagementPage() {
       });
       setEditorOpen(true);
     } catch (error) {
-      if (isRoleMock && error instanceof Error) {
-        message.error(error.message);
-      }
+      showErrorMessageOnce(error, '角色详情加载失败');
     } finally {
       setEditorLoading(false);
     }
@@ -283,9 +413,7 @@ function RoleManagementPage() {
       roleForm.resetFields();
       triggerReload(editingRoleId ? query.pageNum : 1);
     } catch (error) {
-      if (isRoleMock && error instanceof Error) {
-        message.error(error.message);
-      }
+      showErrorMessageOnce(error, editingRoleId ? '角色修改失败' : '角色新增失败');
     } finally {
       setEditorSubmitting(false);
     }
@@ -311,9 +439,7 @@ function RoleManagementPage() {
             void loadDetail(record.id, false);
           }
         } catch (error) {
-          if (isRoleMock && error instanceof Error) {
-            message.error(error.message);
-          }
+          showErrorMessageOnce(error, '角色状态更新失败');
         }
       },
     });
@@ -331,6 +457,9 @@ function RoleManagementPage() {
         try {
           await deleteRoles({ idList: [record.id] });
           message.success('角色删除成功');
+          setSelectedRoleId((currentSelectedRoleId) =>
+            currentSelectedRoleId === record.id ? null : currentSelectedRoleId,
+          );
 
           if (detailRecord?.id === record.id) {
             setDetailOpen(false);
@@ -342,9 +471,7 @@ function RoleManagementPage() {
 
           triggerReload(shouldFallbackToPreviousPage ? query.pageNum - 1 : query.pageNum);
         } catch (error) {
-          if (isRoleMock && error instanceof Error) {
-            message.error(error.message);
-          }
+          showErrorMessageOnce(error, '角色删除失败');
         }
       },
     });
@@ -363,9 +490,7 @@ function RoleManagementPage() {
       });
       setDataScopeOpen(true);
     } catch (error) {
-      if (isRoleMock && error instanceof Error) {
-        message.error(error.message);
-      }
+      showErrorMessageOnce(error, '角色详情加载失败');
     } finally {
       setDataScopeLoading(false);
     }
@@ -405,12 +530,21 @@ function RoleManagementPage() {
         void loadDetail(payload.roleId, false);
       }
     } catch (error) {
-      if (isRoleMock && error instanceof Error) {
-        message.error(error.message);
-      }
+      showErrorMessageOnce(error, '角色数据权限更新失败');
     } finally {
       setDataScopeSubmitting(false);
     }
+  }
+
+  function handleCustomDeptIdsChange(nextDeptIds: number[]) {
+    const normalizedDeptIds = normalizeSelectedDeptIds(
+      nextDeptIds,
+      selectedDeptIds,
+      deptParentIdMap,
+      deptDescendantIdsMap,
+    );
+
+    dataScopeForm.setFieldValue('deptIds', normalizedDeptIds);
   }
 
   function renderCustomDeptTag(props: {
@@ -421,7 +555,11 @@ function RoleManagementPage() {
     const deptLabel = deptPathLabelMap.get(props.value) ?? String(props.value);
 
     return (
-      <Tag closable={props.closable} onClose={props.onClose}>
+      <Tag
+        closable={props.closable}
+        onClose={props.onClose}
+        style={{ display: 'block', marginBottom: 4, marginInlineEnd: 0, width: '100%' }}
+      >
         {deptLabel}
       </Tag>
     );
@@ -490,15 +628,6 @@ function RoleManagementPage() {
             type="link"
           >
             {record.status === 1 ? '停用' : '启用'}
-          </PermissionButton>
-          <PermissionButton
-            danger
-            onClick={() => void handleDeleteRole(record)}
-            permissionCode="system:role:delete"
-            size="small"
-            type="link"
-          >
-            删除
           </PermissionButton>
         </Space>
       ),
@@ -574,13 +703,30 @@ function RoleManagementPage() {
             </Form.Item>
           </Form>
           {/* 角色管理复用通用工具栏布局，保证查询入口和新增动作与账号管理保持一致。 */}
-          <PermissionButton
-            onClick={() => openCreateModal()}
-            permissionCode="system:role:create"
-            type="primary"
-          >
-            新增角色
-          </PermissionButton>
+          <Space>
+            <PermissionButton
+              onClick={() => openCreateModal()}
+              permissionCode="system:role:create"
+              type="primary"
+            >
+              新增角色
+            </PermissionButton>
+            <PermissionButton
+              danger
+              disabled={!selectedRoleRecord}
+              onClick={() => {
+                if (!selectedRoleRecord) {
+                  message.warning('请先选择一条角色数据');
+                  return;
+                }
+
+                void handleDeleteRole(selectedRoleRecord);
+              }}
+              permissionCode="system:role:delete"
+            >
+              删除角色
+            </PermissionButton>
+          </Space>
         </div>
 
         <Table
@@ -609,7 +755,21 @@ function RoleManagementPage() {
             showSizeChanger: true,
             total: pageData.total,
           }}
+          // 删除入口移到顶部后，角色列表统一使用单选承接当前操作对象。
+          rowSelection={{
+            selectedRowKeys: selectedRoleId ? [selectedRoleId] : [],
+            type: 'radio',
+            onChange: (selectedRowKeys) => {
+              const nextSelectedKey = selectedRowKeys[0];
+              setSelectedRoleId(typeof nextSelectedKey === 'number' ? nextSelectedKey : null);
+            },
+          }}
           rowKey="id"
+          onRow={(record) => ({
+            onClick: () => {
+              setSelectedRoleId(record.id);
+            },
+          })}
         />
       </Space>
 
@@ -695,20 +855,21 @@ function RoleManagementPage() {
           </Form.Item>
           {selectedDataScope === 'CUSTOM_DEPT' && (
             <Form.Item
-              extra="仅在“自定义部门”时需要选择组织。"
+              extra="交互方式与用户绑定组织保持一致：树节点显示原始名称，已选内容按完整层级逐行展示，且父子节点不能同时选中。"
               label="自定义部门"
               name="deptIds"
             >
               <TreeSelect
                 allowClear
+                className="user-dept-tree-select"
                 loading={dataScopeLoading}
                 multiple
+                onChange={(value) => handleCustomDeptIdsChange(value as number[])}
                 placeholder="请选择自定义部门"
                 showSearch
                 style={{ width: '100%' }}
                 tagRender={renderCustomDeptTag}
-                treeCheckable
-                treeData={buildDeptTreeSelectData(deptTreeData)}
+                treeData={buildDeptTreeSelectData(deptTreeData, disabledDeptIds)}
                 treeDefaultExpandAll
               />
             </Form.Item>
