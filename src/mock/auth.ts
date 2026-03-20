@@ -1,4 +1,4 @@
-import type { LoginRequest, PermissionPayload } from '@/services/auth.service';
+import type { LoginRequest } from '@/services/auth.service';
 
 function wait(ms = 400) {
   // 人为加一点延迟，是为了让登录 loading 和异步流程在本地也能真实暴露出来。
@@ -6,100 +6,6 @@ function wait(ms = 400) {
     window.setTimeout(resolve, ms);
   });
 }
-
-// 这份权限数据既服务菜单，也服务路由和按钮权限演示。
-// 后续如果要模拟不同角色，可以再补多套 payload。
-export const mockPermissionPayload: PermissionPayload = {
-  userId: 'u1001',
-  name: '运营经理',
-  roles: ['operator_admin'],
-  menus: [
-    {
-      path: '/dashboard',
-      title: '工作台',
-      authCode: 'dashboard:view',
-    },
-    {
-      path: '/content',
-      title: '内容管理',
-      authCode: 'content:module:view',
-      children: [
-        {
-          path: '/content/list',
-          title: '内容列表',
-          authCode: 'content:list:view',
-        },
-      ],
-    },
-    {
-      path: '/operation',
-      title: '运营活动',
-      authCode: 'operation:module:view',
-      children: [
-        {
-          path: '/operation/list',
-          title: '活动列表',
-          authCode: 'operation:list:view',
-        },
-      ],
-    },
-    {
-      path: '/organization',
-      title: '组织管理',
-      authCode: 'organization:module:view',
-      children: [
-        {
-          path: '/organization/depts',
-          title: '组织维护',
-          authCode: 'organization:dept:view',
-        },
-      ],
-    },
-    {
-      path: '/system',
-      title: '系统管理',
-      authCode: 'system:module:view',
-      children: [
-        {
-          path: '/system/users',
-          title: '账号管理',
-          authCode: 'system:user:view',
-        },
-        {
-          path: '/system/roles',
-          title: '角色管理',
-          authCode: 'system:role:view',
-        },
-        {
-          path: '/system/menus',
-          title: '菜单管理',
-          authCode: 'system:menu:view',
-        },
-      ],
-    },
-    {
-      path: '/profile',
-      title: '个人中心',
-      authCode: 'profile:view',
-    },
-  ],
-  buttons: [
-    'content:create',
-    'content:edit',
-    'content:delete',
-    'operation:create',
-    'operation:edit',
-    'operation:delete',
-    'system:user:create',
-    'system:user:edit',
-    'system:user:delete',
-    'system:user:reset-pwd',
-    'system:role:create',
-    'system:role:edit',
-    'system:role:delete',
-    'system:menu:edit',
-  ],
-};
 
 export async function mockLogin(payload: LoginRequest) {
   await wait();

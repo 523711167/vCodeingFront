@@ -3,6 +3,7 @@ import { App as AntdApp, ConfigProvider } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import { BrowserRouter } from 'react-router-dom';
 import { Provider } from 'react-redux';
+import PermissionBootstrap from '@/app/PermissionBootstrap';
 import SessionIdleGuard from '@/app/SessionIdleGuard';
 import { store } from '@/store';
 
@@ -25,6 +26,9 @@ function Providers({ children }: PropsWithChildren) {
         <AntdApp>
           {/* 路由容器放在 Provider 内部，确保页面切换过程中仍然能访问 store。 */}
           <BrowserRouter>
+            {/* 权限自恢复负责在页面刷新后重新向后端同步当前菜单和按钮权限，
+                避免 localStorage 里的旧权限把最新菜单结构覆盖掉。 */}
+            <PermissionBootstrap />
             {/* 空闲会话守卫必须放在路由容器内部，
                 这样自动退出后才能直接跳回登录页。 */}
             <SessionIdleGuard />

@@ -1,13 +1,19 @@
-import { mockLogin, mockPermissionPayload } from '@/mock/auth';
+import axios from 'axios';
+import { mockLogin } from '@/mock/auth';
+import { mockMenuTree } from '@/mock/system';
+import { API_BASE_URLS, API_ENDPOINTS } from '@/services/api-endpoints';
 import {
-  introspectToken,
   requestPasswordToken,
   requestRefreshToken,
   revokeToken,
-  type OAuthIntrospectionResponse,
   type OAuthTokenResponse,
 } from '@/services/oauth.service';
-import { getStoredRefreshToken, getStoredToken } from '@/utils/storage';
+import type { MenuRecord } from '@/services/menu.service';
+import {
+  getStoredRefreshToken,
+  getStoredToken,
+  getStoredTokenType,
+} from '@/utils/storage';
 
 // 登录请求体保持最小结构，后续如果接验证码、多租户或登录方式切换，可以从这里扩展。
 export interface LoginRequest {
@@ -15,21 +21,13 @@ export interface LoginRequest {
   password: string;
 }
 
-// PermissionMenu 描述的是“菜单树结构”，它既能驱动菜单展示，也能辅助路由权限过滤。
-export interface PermissionMenu {
-  path: string;
-  title: string;
-  authCode: string;
-  children?: PermissionMenu[];
-}
-
 // PermissionPayload 是登录后最关键的一份上下文数据。
-// 页面展示、菜单渲染、按钮权限判断都会依赖它。
+// 页面展示、动态路由、侧边菜单和按钮权限都会依赖它。
 export interface PermissionPayload {
   userId: string;
   name: string;
   roles: string[];
-  menus: PermissionMenu[];
+  menus: MenuRecord[];
   buttons: string[];
 }
 
@@ -53,8 +51,24 @@ const useMock = import.meta.env.VITE_USE_AUTH_MOCK
   ? import.meta.env.VITE_USE_AUTH_MOCK !== 'false'
   : import.meta.env.VITE_USE_MOCK !== 'false';
 
-function hasPermissionPrefix(permissions: string[], prefix: string) {
-  return permissions.some((permission) => permission.startsWith(prefix));
+interface ApiResponse<T> {
+  code: number;
+  msg?: string;
+  message?: string;
+  data: T;
+}
+
+// 当前登录用户上下文来自业务接口，而不是 OAuth introspect。
+// 这样做是为了适配后端 claim 精简后，前端仍然能稳定拿到姓名、角色和按钮权限。
+interface CurrentUserContext {
+  userId: number;
+  username: string;
+  realName?: string;
+  avatar?: string;
+  status: number;
+  statusMsg?: string;
+  roleCodes?: string[];
+  permissions?: string[];
 }
 
 function toAuthSession(tokenPayload: OAuthTokenResponse): AuthSession {
@@ -68,104 +82,111 @@ function toAuthSession(tokenPayload: OAuthTokenResponse): AuthSession {
   };
 }
 
-function buildPermissionPayload(claims: OAuthIntrospectionResponse): PermissionPayload {
-  const permissions = claims.permissions ?? [];
-  const roles = claims.roles ?? [];
-  const isAdmin = roles.includes('ADMIN') || claims.sub === 'admin';
-  const canViewDepts = isAdmin || hasPermissionPrefix(permissions, 'sys:dept:');
-  const canViewUsers = isAdmin || hasPermissionPrefix(permissions, 'sys:user:');
-  const canViewRoles = isAdmin || hasPermissionPrefix(permissions, 'sys:role:');
-  const canViewMenus = isAdmin || hasPermissionPrefix(permissions, 'sys:menu:');
-  const organizationChildren: PermissionMenu[] = [];
-  const systemChildren: PermissionMenu[] = [];
-
-  if (canViewDepts) {
-    organizationChildren.push({
-      path: '/organization/depts',
-      title: '组织维护',
-      authCode: 'organization:dept:view',
-    });
-  }
-
-  if (canViewUsers) {
-    systemChildren.push({
-      path: '/system/users',
-      title: '账号管理',
-      authCode: 'system:user:view',
-    });
-  }
-
-  if (canViewRoles) {
-    systemChildren.push({
-      path: '/system/roles',
-      title: '角色管理',
-      authCode: 'system:role:view',
-    });
-  }
-
-  if (canViewMenus) {
-    systemChildren.push({
-      path: '/system/menus',
-      title: '菜单管理',
-      authCode: 'system:menu:view',
-    });
-  }
-
+function buildPermissionPayload(
+  currentUser: CurrentUserContext,
+  menus: MenuRecord[],
+): PermissionPayload {
   return {
-    userId: claims.user_id ?? claims.sub ?? '',
-    name: claims.real_name ?? claims.sub ?? '未命名用户',
-    roles,
-    menus: [
-      {
-        path: '/dashboard',
-        title: '工作台',
-        authCode: 'dashboard:view',
-      },
-      ...(organizationChildren.length
-        ? [
-            {
-              path: '/organization',
-              title: '组织管理',
-              authCode: 'organization:module:view',
-              children: organizationChildren,
-            },
-          ]
-        : []),
-      ...(systemChildren.length
-        ? [
-            {
-              path: '/system',
-              title: '系统管理',
-              authCode: 'system:module:view',
-              children: systemChildren,
-            },
-          ]
-        : []),
-      {
-        path: '/profile',
-        title: '个人中心',
-        authCode: 'profile:view',
-      },
-    ],
-    // 当前前端只用到了少量按钮权限，因此这里先做一层聚焦映射。
-    // 如果后续页面开始直接消费 sys:* 原始权限码，可以在这里改成双写或直接透传。
-    buttons: [
-      ...(permissions.includes('sys:user:add') ? ['system:user:create'] : []),
-      ...(permissions.includes('sys:user:edit') ? ['system:user:edit'] : []),
-      ...(permissions.includes('sys:user:delete') ? ['system:user:delete'] : []),
-      ...(permissions.includes('sys:user:reset-pwd')
-        ? ['system:user:reset-pwd']
-        : []),
-      ...(permissions.includes('sys:role:add') ? ['system:role:create'] : []),
-      ...(permissions.includes('sys:role:edit') ? ['system:role:edit'] : []),
-      ...(permissions.includes('sys:role:delete') ? ['system:role:delete'] : []),
-      ...(permissions.includes('sys:menu:edit') ? ['system:menu:edit'] : []),
-    ],
+    userId: String(currentUser.userId ?? ''),
+    name: currentUser.realName ?? currentUser.username ?? '未命名用户',
+    roles: currentUser.roleCodes ?? [],
+    // 路由、菜单和图标完全以后端菜单树为准，前端不再保留一份同构静态菜单配置。
+    menus,
+    // 按钮权限暂时继续保留原始权限码，后续如果恢复按钮级校验，可以直接基于这份数据消费。
+    buttons: currentUser.permissions ?? [],
   };
 }
 
 export function getDefaultRoutePath(payload?: PermissionPayload | null) {
-  return payload?.menus[0]?.path ?? '/403';
+  const walk = (menus: MenuRecord[]): string | null => {
+    for (const menu of menus) {
+      if (menu.status !== 1 || menu.type === 'BUTTON' || !menu.path) {
+        continue;
+      }
+
+      if (menu.type === 'MENU') {
+        return menu.path;
+      }
+
+      const childPath = walk(menu.children ?? []);
+
+      if (childPath) {
+        return childPath;
+      }
+    }
+
+    return null;
+  };
+
+  return walk(payload?.menus ?? []) ?? '/403';
+}
+
+async function fetchCurrentMenus(session: AuthSession) {
+  const response = await axios.get<ApiResponse<MenuRecord[]>>(
+    `${API_BASE_URLS.business}${API_ENDPOINTS.menu.tree}`,
+    {
+      headers: {
+        Authorization: `${session.tokenType} ${session.accessToken}`,
+      },
+      timeout: 10000,
+    },
+  );
+  const result = response.data;
+  const resultMessage = result.message ?? result.msg ?? '菜单数据加载失败';
+
+  if (result.code !== 0) {
+    throw new Error(resultMessage);
+  }
+
+  return result.data;
+}
+
+async function fetchCurrentUserContext(session: AuthSession) {
+  // 登录后的“用户是谁、有哪些角色和按钮权限”以后统一走 current-user，
+  // 这样后端即使继续调整 OAuth claim，前端菜单和权限也不会再次丢失。
+  const response = await axios.get<ApiResponse<CurrentUserContext>>(
+    `${API_BASE_URLS.business}${API_ENDPOINTS.auth.currentUser}`,
+    {
+      headers: {
+        Authorization: `${session.tokenType} ${session.accessToken}`,
+      },
+      timeout: 10000,
+    },
+  );
+  const result = response.data;
+  const resultMessage = result.message ?? result.msg ?? '当前登录用户信息加载失败';
+
+  if (result.code !== 0) {
+    throw new Error(resultMessage);
+  }
+
+  return result.data;
+}
+
+// 这个方法同时给“登录成功后初始化权限”和“页面刷新后的权限自恢复”复用。
+// 这样当前用户、菜单树和按钮权限始终来自同一组后端接口，不会出现缓存越用越旧的问题。
+export async function fetchCurrentPermissionPayload(
+  session: Pick<AuthSession, 'accessToken' | 'tokenType'> = {
+    accessToken: getStoredToken(),
+    tokenType: getStoredTokenType(),
+  },
+) {
+  if (!session.accessToken) {
+    throw new Error('缺少 access token，无法加载当前权限');
+  }
+
+  const authSession: AuthSession = {
+    accessToken: session.accessToken,
+    expiresAt: 0,
+    refreshToken: '',
+    tokenType: session.tokenType,
+  };
+  const [currentUser, currentMenus] = await Promise.all([
+    fetchCurrentUserContext(authSession),
+    fetchCurrentMenus(authSession),
+  ]);
+
+  return buildPermissionPayload(currentUser, currentMenus);
 }
 
 export async function refreshCurrentSession(refreshToken = getStoredRefreshToken()) {
@@ -188,7 +209,26 @@ export async function login(payload: LoginRequest) {
         tokenType: 'Bearer',
         expiresAt: Date.now() + 7199 * 1000,
       },
-      permissionPayload: mockPermissionPayload,
+      permissionPayload: buildPermissionPayload(
+        {
+          permissions: [
+            'sys:user:add',
+            'sys:user:edit',
+            'sys:user:delete',
+            'sys:user:reset-pwd',
+            'sys:role:add',
+            'sys:role:edit',
+            'sys:role:delete',
+            'sys:menu:edit',
+          ],
+          realName: '运营经理',
+          roleCodes: ['operator_admin'],
+          status: 1,
+          userId: 1001,
+          username: 'mock-admin',
+        },
+        mockMenuTree,
+      ),
     } satisfies LoginResult;
   }
 
@@ -196,15 +236,12 @@ export async function login(payload: LoginRequest) {
     await requestPasswordToken(payload.username, payload.password),
   );
   const activeSession = initialSession;
-  const claims = await introspectToken(activeSession.accessToken);
-
-  if (!claims.active) {
-    throw new Error('登录成功，但令牌校验失败');
-  }
 
   return {
     session: activeSession,
-    permissionPayload: buildPermissionPayload(claims),
+    // 当前后端的 introspect 结果并不稳定，登录后完整的姓名、角色和权限
+    // 统一以业务接口 /sys/auth/current-user 为准，避免再次出现“登录成功但菜单为空”的问题。
+    permissionPayload: await fetchCurrentPermissionPayload(activeSession),
   } satisfies LoginResult;
 }
 

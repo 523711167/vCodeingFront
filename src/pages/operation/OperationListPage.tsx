@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ColumnsType } from 'antd/es/table';
 import { Input, Space, Table, Tag } from 'antd';
-import { useNavigate } from 'react-router-dom';
 import PageContainer from '@/components/PageContainer';
 import PermissionButton from '@/components/PermissionButton';
 import { fetchActivityList, type ActivityItem } from '@/services/operation.service';
@@ -30,7 +29,6 @@ const columns: ColumnsType<ActivityItem> = [
 ];
 
 function OperationListPage() {
-  const navigate = useNavigate();
   const [data, setData] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -44,17 +42,7 @@ function OperationListPage() {
 
   return (
     <PageContainer
-      description="运营活动页展示了活动列表、状态和基础操作入口。"
-      extra={
-        <PermissionButton
-          permissionCode="operation:create"
-          type="primary"
-          // 活动创建走独立页面，方便后续扩展更复杂的活动配置表单。
-          onClick={() => navigate('/operation/create')}
-        >
-          新增活动
-        </PermissionButton>
-      }
+      description="活动列表页当前只保留后端菜单已覆盖的列表能力，不再暴露没有菜单支撑的新增/编辑入口。"
       title="活动列表"
     >
       <Space className="toolbar" direction="vertical" size={16}>
@@ -65,17 +53,8 @@ function OperationListPage() {
             {
               key: 'action',
               title: '操作',
-              render: (_, record) => (
+              render: () => (
                 <Space>
-                  {/* 操作区仍然统一走权限按钮，避免页面里手写按钮显隐判断。 */}
-                  <PermissionButton
-                    permissionCode="operation:edit"
-                    onClick={() => navigate(`/operation/edit/${record.id}`)}
-                    size="small"
-                    type="link"
-                  >
-                    编辑
-                  </PermissionButton>
                   <PermissionButton
                     danger
                     permissionCode="operation:delete"

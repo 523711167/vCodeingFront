@@ -9,7 +9,7 @@ function ForbiddenPage() {
       <Result
         extra={
           // 403 场景下，回到工作台通常比浏览器返回更稳定。
-          <Button onClick={() => navigate('/dashboard')} type="primary">
+          <Button onClick={() => navigate('/workbench')} type="primary">
             返回工作台
           </Button>
         }

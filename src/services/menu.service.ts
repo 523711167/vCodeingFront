@@ -2,7 +2,7 @@ import { mockMenuTree } from '@/mock/system';
 import { API_ENDPOINTS } from '@/services/api-endpoints';
 import { request } from '@/services/http';
 
-export type MenuTypeValue = 1 | 2 | 3;
+export type MenuTypeValue = 'DIRECTORY' | 'MENU' | 'BUTTON';
 export type MenuVisibleValue = 0 | 1;
 export type MenuStatusValue = 0 | 1;
 
@@ -75,11 +75,11 @@ let mockMenuDb = cloneMenuTree(mockMenuTree);
 
 function toMenuTypeMsg(type: MenuTypeValue) {
   switch (type) {
-    case 1:
+    case 'DIRECTORY':
       return '目录';
-    case 2:
+    case 'MENU':
       return '菜单';
-    case 3:
+    case 'BUTTON':
       return '按钮';
     default:
       return String(type);
@@ -149,7 +149,7 @@ function filterMenuTree(nodes: MenuRecord[], query: MenuTreeQuery): MenuRecord[]
   return nodes.reduce<MenuRecord[]>((acc, node) => {
     const children = node.children ? filterMenuTree(node.children, query) : undefined;
     const matchedName = query.name ? node.name.includes(query.name) : true;
-    const matchedType = typeof query.type === 'number' ? node.type === query.type : true;
+    const matchedType = query.type ? node.type === query.type : true;
     const matchedVisible =
       typeof query.visible === 'number' ? node.visible === query.visible : true;
     const matchedStatus =

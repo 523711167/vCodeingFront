@@ -8,7 +8,7 @@ export type DataScopeCode =
   | 'CURRENT_AND_CHILD_DEPT'
   | 'CURRENT_DEPT'
   | 'SELF';
-export type MenuTypeCode = 1 | 2 | 3;
+export type MenuTypeCode = 'DIRECTORY' | 'MENU' | 'BUTTON';
 
 // 组织类型下拉先按后端约定的 key/value 维护：
 // key 传给接口，label 展示给用户，避免页面层自己写魔法字符串。
@@ -37,19 +37,19 @@ export function getOrgTypeLabel(orgType?: string) {
 
 // 菜单管理页先用静态类型字典，等后端有统一字典接口后再切换数据源。
 export const MENU_TYPE_OPTIONS: Array<{ label: string; value: MenuTypeCode }> = [
-  { label: '目录', value: 1 },
-  { label: '菜单', value: 2 },
-  { label: '按钮', value: 3 },
+  { label: '目录', value: 'DIRECTORY' },
+  { label: '菜单', value: 'MENU' },
+  { label: '按钮', value: 'BUTTON' },
 ];
 
 const MENU_TYPE_LABEL_MAP: Record<MenuTypeCode, string> = {
-  1: '目录',
-  2: '菜单',
-  3: '按钮',
+  DIRECTORY: '目录',
+  MENU: '菜单',
+  BUTTON: '按钮',
 };
 
-export function getMenuTypeLabel(type?: number) {
-  if (typeof type !== 'number') {
+export function getMenuTypeLabel(type?: string) {
+  if (!type) {
     return '-';
   }
 

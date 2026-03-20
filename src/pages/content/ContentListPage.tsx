@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ColumnsType } from 'antd/es/table';
 import { Input, Space, Table, Tag } from 'antd';
-import { useNavigate } from 'react-router-dom';
 import PageContainer from '@/components/PageContainer';
 import PermissionButton from '@/components/PermissionButton';
 import { fetchContentList, type ContentItem } from '@/services/content.service';
@@ -34,7 +33,6 @@ const columns: ColumnsType<ContentItem> = [
 ];
 
 function ContentListPage() {
-  const navigate = useNavigate();
   const [data, setData] = useState<ContentItem[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -49,17 +47,7 @@ function ContentListPage() {
 
   return (
     <PageContainer
-      description="示例内容列表页，包含搜索区、表格区与常见操作按钮。"
-      extra={
-        <PermissionButton
-          permissionCode="content:create"
-          type="primary"
-          // 列表页只负责跳转，不直接承载创建表单。
-          onClick={() => navigate('/content/create')}
-        >
-          新增内容
-        </PermissionButton>
-      }
+      description="内容列表页当前只保留后端菜单已覆盖的列表能力，不再暴露没有菜单支撑的新增/编辑入口。"
       title="内容列表"
     >
       <Space className="toolbar" direction="vertical" size={16}>
@@ -71,17 +59,8 @@ function ContentListPage() {
             {
               key: 'action',
               title: '操作',
-              render: (_, record) => (
+              render: () => (
                 <Space>
-                  {/* 编辑页复用同一个表单组件，通过 id 参数区分编辑对象。 */}
-                  <PermissionButton
-                    permissionCode="content:edit"
-                    onClick={() => navigate(`/content/edit/${record.id}`)}
-                    size="small"
-                    type="link"
-                  >
-                    编辑
-                  </PermissionButton>
                   <PermissionButton
                     danger
                     permissionCode="content:delete"

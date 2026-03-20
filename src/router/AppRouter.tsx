@@ -4,7 +4,8 @@ import { Navigate, useRoutes } from 'react-router-dom';
 import { flattenRoutes } from '@/features/permission/filterRoutes';
 import { getDefaultRoutePath } from '@/services/auth.service';
 import MainLayout from '@/layouts/MainLayout';
-import { businessRoutes, publicRoutes } from '@/router/routes';
+import { buildBackendRoutes } from '@/router/backend-routes';
+import { publicRoutes } from '@/router/routes';
 import { AuthGuard } from '@/router/guards';
 import type { AppRouteItem } from '@/router/types';
 import { useAppSelector } from '@/store/hooks';
@@ -35,11 +36,10 @@ function toKnownModuleFallbacks(routes: AppRouteItem[]): RouteObject[] {
 
 function AppRouter() {
   const currentUser = useAppSelector((state) => state.permission.user);
-
-  // 当前阶段临时取消菜单级权限限制：登录后统一开放业务菜单和路由。
-  // 这样组织管理、系统管理等模块都能直接进入，后续如果要恢复精细权限，
-  // 再把这里切回基于 permissionCodes 的过滤即可。
-  const allowedBusinessRoutes = useMemo(() => businessRoutes, []);
+  const allowedBusinessRoutes = useMemo(
+    () => buildBackendRoutes(currentUser?.menus ?? []),
+    [currentUser?.menus],
+  );
   const defaultRoutePath = getDefaultRoutePath(currentUser);
   const knownModuleFallbacks = useMemo(
     () => toKnownModuleFallbacks(allowedBusinessRoutes),

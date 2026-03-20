@@ -3,7 +3,6 @@ import type { ReactNode } from 'react';
 export interface AppRouteMeta {
   title: string;
   icon?: string;
-  authCode?: string;
   hidden?: boolean;
   keepAlive?: boolean;
 }

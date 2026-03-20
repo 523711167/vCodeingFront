@@ -61,6 +61,7 @@ import PermissionButton from '@/components/PermissionButton';
 import {
   MENU_ICON_OPTIONS,
   MENU_TYPE_OPTIONS,
+  type MenuTypeCode,
   VISIBLE_STATUS_OPTIONS,
   getMenuTypeLabel,
 } from '@/constants/select-options';
@@ -80,13 +81,13 @@ import { showErrorMessageOnce } from '@/services/error-message';
 
 interface SearchFormValues {
   name?: string;
-  type?: number;
+  type?: MenuTypeCode;
   visible?: number;
 }
 
 interface MenuFormValues {
   parentId?: number;
-  type: number;
+  type: MenuTypeCode;
   name: string;
   permission?: string;
   path?: string;
@@ -154,15 +155,15 @@ function getVisibleTagColor(visible: number) {
   return visible === 1 ? 'blue' : 'default';
 }
 
-function getMenuTypeTagColor(type: number) {
+function getMenuTypeTagColor(type: MenuTypeCode) {
   // 菜单类型在树表格里需要快速区分“目录 / 菜单 / 按钮”，
   // 这里直接映射成稳定的标签色，后续如果新增类型也只需要补这里。
   switch (type) {
-    case 1:
+    case 'DIRECTORY':
       return 'purple';
-    case 2:
+    case 'MENU':
       return 'processing';
-    case 3:
+    case 'BUTTON':
       return 'orange';
     default:
       return 'default';
@@ -301,7 +302,7 @@ function MenuManagementPage() {
     menuForm.resetFields();
     menuForm.setFieldsValue({
       parentId,
-      type: 2,
+      type: 'MENU',
       visible: 1,
       status: 1,
       sortOrder: 1,
@@ -343,7 +344,7 @@ function MenuManagementPage() {
         const payload: UpdateMenuPayload = {
           id: editingMenuId,
           parentId: values.parentId,
-          type: values.type as 1 | 2 | 3,
+          type: values.type,
           name: values.name.trim(),
           permission: values.permission?.trim() || undefined,
           path: values.path?.trim() || undefined,
@@ -359,7 +360,7 @@ function MenuManagementPage() {
       } else {
         const payload: CreateMenuPayload = {
           parentId: values.parentId,
-          type: values.type as 1 | 2 | 3,
+          type: values.type,
           name: values.name.trim(),
           permission: values.permission?.trim() || undefined,
           path: values.path?.trim() || undefined,
@@ -519,7 +520,7 @@ function MenuManagementPage() {
             onFinish={(values) => {
               setQuery({
                 name: values.name?.trim() || undefined,
-                type: values.type as 1 | 2 | 3 | undefined,
+                type: values.type,
                 visible: values.visible as 0 | 1 | undefined,
               });
             }}
@@ -646,7 +647,7 @@ function MenuManagementPage() {
         <Form<MenuFormValues>
           form={menuForm}
           initialValues={{
-            type: 2,
+            type: 'MENU',
             visible: 1,
             status: 1,
             sortOrder: 1,

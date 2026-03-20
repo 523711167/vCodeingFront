@@ -101,9 +101,11 @@ let mockRoleDb: RoleRecord[] = mockRoles.map((role) => ({
 // 角色菜单授权单独维护，是为了避免把“数据权限”和“菜单权限”混进角色基础信息里，
 // 后续如果后端补充更多授权维度，也可以继续沿用这种拆分方式扩展。
 let mockRoleMenuDb: RoleMenuRecord[] = [
-  { roleId: 1, menuIds: [1, 2, 21, 3, 31, 4, 41, 5, 51, 52, 53] },
-  { roleId: 2, menuIds: [1, 2, 21, 5, 52] },
-  { roleId: 3, menuIds: [1, 3, 31, 5, 52] },
+  // mock 授权菜单需要和 mockMenuTree 保持同步，
+  // 否则角色管理页切到 mock 时会出现菜单树节点存在、授权结果却丢失的假象。
+  { roleId: 1, menuIds: [1, 11, 12, 13, 14, 2, 21, 3, 31, 4, 41, 5, 51, 52, 53] },
+  { roleId: 2, menuIds: [1, 11, 12, 13, 14, 2, 21, 5, 52] },
+  { roleId: 3, menuIds: [1, 11, 12, 13, 14, 3, 31, 5, 52] },
 ];
 
 function buildMockPageResult(query: RolePageQuery): RolePageResult {
