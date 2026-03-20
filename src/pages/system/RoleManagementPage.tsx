@@ -13,6 +13,7 @@ import {
   Space,
   Table,
   Tag,
+  Tree,
   TreeSelect,
 } from 'antd';
 import PageContainer from '@/components/PageContainer';
@@ -28,8 +29,10 @@ import {
   createRole,
   deleteRoles,
   fetchRoleDetail,
+  fetchRoleMenus,
   fetchRolePage,
   updateRoleDataScope,
+  updateRoleMenus,
   updateRole,
   updateRoleStatus,
   type CreateRolePayload,
@@ -37,8 +40,10 @@ import {
   type RolePageResult,
   type RoleRecord,
   type UpdateRoleDataScopePayload,
+  type UpdateRoleMenusPayload,
   type UpdateRolePayload,
 } from '@/services/role.service';
+import { fetchMenuTree, type MenuRecord } from '@/services/menu.service';
 
 interface SearchFormValues {
   name?: string;
@@ -56,6 +61,12 @@ interface RoleFormValues {
 interface RoleDataScopeFormValues {
   dataScope: DataScopeCode;
   deptIds?: number[];
+}
+
+interface RoleMenuTreeNode {
+  key: number;
+  title: string;
+  children?: RoleMenuTreeNode[];
 }
 
 interface DeptTreeSelectOption {
@@ -219,6 +230,15 @@ function buildDisabledDeptIds(
   return disabledDeptIds;
 }
 
+function buildRoleMenuTreeData(nodes: MenuRecord[]): RoleMenuTreeNode[] {
+  return nodes.map((node) => ({
+    key: node.id,
+    // 角色菜单授权场景先优先展示原始菜单名称，避免树标题里叠加过多信息影响勾选效率。
+    title: node.name,
+    children: node.children?.length ? buildRoleMenuTreeData(node.children) : undefined,
+  }));
+}
+
 function RoleManagementPage() {
   const { message, modal } = AntdApp.useApp();
   const [searchForm] = Form.useForm<SearchFormValues>();
@@ -246,6 +266,12 @@ function RoleManagementPage() {
   const [dataScopeLoading, setDataScopeLoading] = useState(false);
   const [dataScopeSubmitting, setDataScopeSubmitting] = useState(false);
   const [dataScopeTargetRole, setDataScopeTargetRole] = useState<RoleRecord | null>(null);
+  const [roleMenuOpen, setRoleMenuOpen] = useState(false);
+  const [roleMenuLoading, setRoleMenuLoading] = useState(false);
+  const [roleMenuSubmitting, setRoleMenuSubmitting] = useState(false);
+  const [roleMenuTargetRole, setRoleMenuTargetRole] = useState<RoleRecord | null>(null);
+  const [roleMenuTreeData, setRoleMenuTreeData] = useState<MenuRecord[]>([]);
+  const [checkedRoleMenuIds, setCheckedRoleMenuIds] = useState<number[]>([]);
   const [deptTreeData, setDeptTreeData] = useState<DeptTreeRecord[]>([]);
   const selectedDataScope = Form.useWatch('dataScope', dataScopeForm);
   const selectedDeptIds = Form.useWatch('deptIds', dataScopeForm) ?? [];
@@ -496,6 +522,53 @@ function RoleManagementPage() {
     }
   }
 
+  async function openRoleMenuModal(record: RoleRecord) {
+    try {
+      setRoleMenuLoading(true);
+      setRoleMenuTargetRole(record);
+      setCheckedRoleMenuIds([]);
+
+      // 当前角色已授权菜单和完整菜单树同时加载，
+      // 是为了让弹框打开时直接具备“默认勾选 + 完整可选树”两部分上下文。
+      const [roleMenus, menuTree] = await Promise.all([
+        fetchRoleMenus(record.id),
+        fetchMenuTree(),
+      ]);
+
+      setRoleMenuTreeData(menuTree);
+      setCheckedRoleMenuIds(roleMenus.menuIds);
+      setRoleMenuOpen(true);
+    } catch (error) {
+      showErrorMessageOnce(error, '角色菜单加载失败');
+    } finally {
+      setRoleMenuLoading(false);
+    }
+  }
+
+  async function handleSubmitRoleMenus() {
+    if (!roleMenuTargetRole) {
+      return;
+    }
+
+    try {
+      setRoleMenuSubmitting(true);
+      const payload: UpdateRoleMenusPayload = {
+        roleId: roleMenuTargetRole.id,
+        menuIds: checkedRoleMenuIds,
+      };
+
+      await updateRoleMenus(payload);
+      message.success('角色菜单关联成功');
+      setRoleMenuOpen(false);
+      setRoleMenuTargetRole(null);
+      setCheckedRoleMenuIds([]);
+    } catch (error) {
+      showErrorMessageOnce(error, '角色菜单关联失败');
+    } finally {
+      setRoleMenuSubmitting(false);
+    }
+  }
+
   async function handleSubmitDataScope(values: RoleDataScopeFormValues) {
     if (!dataScopeTargetRole) {
       return;
@@ -599,7 +672,7 @@ function RoleManagementPage() {
     {
       key: 'action',
       title: '操作',
-      width: 380,
+      width: 460,
       render: (_, record) => (
         <Space size={4} wrap>
           <Button onClick={() => void loadDetail(record.id)} size="small" type="link">
@@ -622,6 +695,14 @@ function RoleManagementPage() {
             数据权限
           </PermissionButton>
           <PermissionButton
+            onClick={() => void openRoleMenuModal(record)}
+            permissionCode="system:role:assign-menu"
+            size="small"
+            type="link"
+          >
+            关联菜单
+          </PermissionButton>
+          <PermissionButton
             onClick={() => void handleToggleRoleStatus(record)}
             permissionCode="system:role:edit"
             size="small"
@@ -633,10 +714,14 @@ function RoleManagementPage() {
       ),
     },
   ];
+  const roleMenuTreeNodes = useMemo(
+    () => buildRoleMenuTreeData(roleMenuTreeData),
+    [roleMenuTreeData],
+  );
 
   return (
     <PageContainer
-      description="角色管理页当前已对接真实角色接口，支持分页查询、详情、新增、修改、数据权限配置、状态切换和删除。"
+      description="角色管理页当前已对接真实角色接口，支持分页查询、详情、新增、修改、数据权限配置、菜单关联、状态切换和删除。"
       title="角色管理"
     >
       <Space className="toolbar" direction="vertical" size={16}>
@@ -875,6 +960,49 @@ function RoleManagementPage() {
             </Form.Item>
           )}
         </Form>
+      </Modal>
+
+      <Modal
+        confirmLoading={roleMenuSubmitting}
+        destroyOnClose
+        onCancel={() => {
+          setRoleMenuOpen(false);
+          setRoleMenuTargetRole(null);
+          setCheckedRoleMenuIds([]);
+        }}
+        onOk={() => void handleSubmitRoleMenus()}
+        open={roleMenuOpen}
+        title="关联菜单"
+        width={720}
+      >
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <Input disabled value={roleMenuTargetRole?.name || ''} />
+          <div style={{ color: '#999' }}>
+            支持目录、菜单、按钮同时勾选；父子节点不会互斥，便于精确配置角色菜单权限。
+          </div>
+          {roleMenuLoading && <div style={{ color: '#999' }}>正在加载角色菜单数据...</div>}
+          <div
+            style={{
+              border: '1px solid #f0f0f0',
+              borderRadius: 8,
+              maxHeight: 420,
+              overflow: 'auto',
+              padding: 12,
+            }}
+          >
+            <Tree
+              blockNode
+              checkable
+              checkedKeys={checkedRoleMenuIds}
+              defaultExpandAll
+              height={380}
+              onCheck={(checkedKeys) => {
+                setCheckedRoleMenuIds(checkedKeys as number[]);
+              }}
+              treeData={roleMenuTreeNodes}
+            />
+          </div>
+        </Space>
       </Modal>
 
       <Modal

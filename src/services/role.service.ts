@@ -2,7 +2,7 @@ import {
   getDataScopeLabelByCode,
   type DataScopeCode,
 } from '@/constants/select-options';
-import { mockRoles } from '@/mock/system';
+import { mockMenuTree, mockRoles } from '@/mock/system';
 import { API_ENDPOINTS } from '@/services/api-endpoints';
 import { request } from '@/services/http';
 
@@ -75,6 +75,16 @@ export interface UpdateRoleDataScopePayload {
   deptIds?: number[];
 }
 
+export interface RoleMenuRecord {
+  roleId: number;
+  menuIds: number[];
+}
+
+export interface UpdateRoleMenusPayload {
+  roleId: number;
+  menuIds?: number[];
+}
+
 const useRoleMock = import.meta.env.VITE_USE_ROLE_MOCK
   ? import.meta.env.VITE_USE_ROLE_MOCK !== 'false'
   : import.meta.env.VITE_USE_USER_MOCK
@@ -87,6 +97,14 @@ let mockRoleDb: RoleRecord[] = mockRoles.map((role) => ({
   ...role,
   customDeptIds: [...role.customDeptIds],
 }));
+
+// 角色菜单授权单独维护，是为了避免把“数据权限”和“菜单权限”混进角色基础信息里，
+// 后续如果后端补充更多授权维度，也可以继续沿用这种拆分方式扩展。
+let mockRoleMenuDb: RoleMenuRecord[] = [
+  { roleId: 1, menuIds: [1, 2, 21, 3, 31, 4, 41, 5, 51, 52, 53] },
+  { roleId: 2, menuIds: [1, 2, 21, 5, 52] },
+  { roleId: 3, menuIds: [1, 3, 31, 5, 52] },
+];
 
 function buildMockPageResult(query: RolePageQuery): RolePageResult {
   const filtered = mockRoleDb.filter((role) => {
@@ -149,6 +167,13 @@ function getDeleteRoleIds(payload: DeleteRolesPayload) {
   throw new Error('缺少要删除的角色ID');
 }
 
+function getAllMenuIds(nodes: typeof mockMenuTree): number[] {
+  return nodes.flatMap((node) => [
+    node.id,
+    ...getAllMenuIds(node.children ?? []),
+  ]);
+}
+
 export async function fetchRolePage(query: RolePageQuery) {
   if (useRoleMock) {
     return Promise.resolve(buildMockPageResult(query));
@@ -182,6 +207,29 @@ export async function fetchRoleDetail(id: number) {
     method: 'get',
     params: { id },
     url: API_ENDPOINTS.role.detail,
+  });
+}
+
+export async function fetchRoleMenus(roleId: number) {
+  if (useRoleMock) {
+    findMockRoleOrThrow(roleId);
+    const targetRoleMenu =
+      mockRoleMenuDb.find((item) => item.roleId === roleId) ??
+      {
+        roleId,
+        menuIds: [],
+      };
+
+    return Promise.resolve({
+      roleId: targetRoleMenu.roleId,
+      menuIds: [...targetRoleMenu.menuIds],
+    });
+  }
+
+  return request<RoleMenuRecord>({
+    method: 'get',
+    params: { id: roleId },
+    url: API_ENDPOINTS.role.menus,
   });
 }
 
@@ -276,6 +324,7 @@ export async function deleteRoles(payload: DeleteRolesPayload) {
       findMockRoleOrThrow(id);
     });
     mockRoleDb = mockRoleDb.filter((role) => !deleteIds.includes(role.id));
+    mockRoleMenuDb = mockRoleMenuDb.filter((item) => !deleteIds.includes(item.roleId));
     return Promise.resolve({});
   }
 
@@ -309,5 +358,41 @@ export async function updateRoleDataScope(payload: UpdateRoleDataScopePayload) {
     },
     method: 'post',
     url: API_ENDPOINTS.role.updateDataScope,
+  });
+}
+
+export async function updateRoleMenus(payload: UpdateRoleMenusPayload) {
+  if (useRoleMock) {
+    findMockRoleOrThrow(payload.roleId);
+    const allMenuIds = new Set(getAllMenuIds(mockMenuTree));
+    const nextMenuIds = [...new Set(payload.menuIds ?? [])];
+
+    nextMenuIds.forEach((menuId) => {
+      if (!allMenuIds.has(menuId)) {
+        throw new Error(`菜单 ${menuId} 不存在`);
+      }
+    });
+
+    const targetRoleMenu = mockRoleMenuDb.find((item) => item.roleId === payload.roleId);
+
+    if (targetRoleMenu) {
+      targetRoleMenu.menuIds = nextMenuIds;
+    } else {
+      mockRoleMenuDb.push({
+        roleId: payload.roleId,
+        menuIds: nextMenuIds,
+      });
+    }
+
+    return Promise.resolve({});
+  }
+
+  return request<Record<string, never>>({
+    data: {
+      roleId: payload.roleId,
+      menuIds: payload.menuIds ?? [],
+    },
+    method: 'post',
+    url: API_ENDPOINTS.role.updateMenus,
   });
 }
