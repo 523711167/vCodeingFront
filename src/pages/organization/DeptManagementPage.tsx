@@ -481,6 +481,7 @@ function DeptManagementPage() {
             rules={[{ required: true, message: '请选择组织类型' }]}
           >
             <Select
+              disabled={Boolean(editingDeptId)}
               onChange={(value) => {
                 if (value !== 'POST') {
                   deptForm.setFieldValue('postType', undefined);
@@ -547,7 +548,7 @@ function DeptManagementPage() {
 
         {editingDeptId && (
           <div style={{ color: '#999', marginTop: 8 }}>
-            当前后端修改接口不支持调整父级组织，如需移动组织需继续对接移动接口。
+            当前后端修改接口不支持调整父级组织和组织类型，如需移动组织需继续对接移动接口。
           </div>
         )}
       </Modal>
