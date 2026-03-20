@@ -1,5 +1,6 @@
 import { API_ENDPOINTS } from '@/services/api-endpoints';
 import { fetchDeptTree, type DeptTreeRecord } from '@/services/dept.service';
+import { fetchRoleList } from '@/services/role.service';
 import { request } from '@/services/http';
 import { mockUsers } from '@/mock/system';
 
@@ -94,6 +95,11 @@ export interface UpdateUserDeptItemPayload {
 export interface UpdateUserDeptsPayload {
   userId: number;
   depts: UpdateUserDeptItemPayload[];
+}
+
+export interface UpdateUserRolesPayload {
+  userId: number;
+  roleIds: number[];
 }
 
 const useUserMock = import.meta.env.VITE_USE_USER_MOCK
@@ -321,5 +327,39 @@ export async function updateUserDepts(payload: UpdateUserDeptsPayload) {
     data: payload,
     method: 'post',
     url: API_ENDPOINTS.user.updateDepts,
+  });
+}
+
+export async function updateUserRoles(payload: UpdateUserRolesPayload) {
+  if (useUserMock) {
+    const targetUser = findMockUserOrThrow(payload.userId);
+    const roleList = await fetchRoleList();
+    const roleMap = new Map(roleList.map((role) => [role.id, role] as const));
+
+    // mock 分支复用角色服务的最新列表，是为了让“新增角色/修改角色”后的结果
+    // 能直接反映到用户关联角色弹框和详情展示里，不需要维护第二份角色快照。
+    targetUser.roles = payload.roleIds.map((roleId) => {
+      const matchedRole = roleMap.get(roleId);
+
+      if (!matchedRole) {
+        throw new Error(`角色 ${roleId} 不存在`);
+      }
+
+      return {
+        id: matchedRole.id,
+        name: matchedRole.name,
+        code: matchedRole.code,
+        status: matchedRole.status,
+      };
+    });
+    targetUser.updatedAt = new Date().toISOString().replace('T', ' ').slice(0, 19);
+
+    return Promise.resolve(cloneMockUser(targetUser));
+  }
+
+  return request<Record<string, never>>({
+    data: payload,
+    method: 'post',
+    url: API_ENDPOINTS.user.updateRoles,
   });
 }

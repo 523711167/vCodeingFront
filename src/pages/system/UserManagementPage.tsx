@@ -18,6 +18,7 @@ import PageContainer from '@/components/PageContainer';
 import PermissionButton from '@/components/PermissionButton';
 import type { DeptTreeRecord } from '@/services/dept.service';
 import { fetchDeptTree } from '@/services/dept.service';
+import { fetchRoleList, type RoleRecord } from '@/services/role.service';
 import {
   createUser,
   deleteUsers,
@@ -26,10 +27,12 @@ import {
   resetUserPassword,
   updateUser,
   updateUserDepts,
+  updateUserRoles,
   updateUserStatus,
   type CreateUserPayload,
   type UpdateUserPayload,
   type UpdateUserDeptsPayload,
+  type UpdateUserRolesPayload,
   type UserPageQuery,
   type UserPageResult,
   type UserRecord,
@@ -60,6 +63,10 @@ interface ResetPasswordFormValues {
 interface UserDeptBindingFormValues {
   deptIds?: number[];
   primaryDeptId?: number;
+}
+
+interface UserRoleBindingFormValues {
+  roleIds?: number[];
 }
 
 interface DeptTreeSelectOption {
@@ -286,6 +293,14 @@ function UserManagementPage() {
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [passwordSubmitting, setPasswordSubmitting] = useState(false);
   const [passwordTargetUser, setPasswordTargetUser] = useState<UserRecord | null>(null);
+  const [roleBindingForm] = Form.useForm<UserRoleBindingFormValues>();
+  const [roleBindingOpen, setRoleBindingOpen] = useState(false);
+  const [roleBindingLoading, setRoleBindingLoading] = useState(false);
+  const [roleBindingSubmitting, setRoleBindingSubmitting] = useState(false);
+  const [roleBindingTargetUser, setRoleBindingTargetUser] = useState<UserRecord | null>(
+    null,
+  );
+  const [roleOptions, setRoleOptions] = useState<RoleRecord[]>([]);
   const [deptBindingOpen, setDeptBindingOpen] = useState(false);
   const [deptBindingLoading, setDeptBindingLoading] = useState(false);
   const [deptBindingSubmitting, setDeptBindingSubmitting] = useState(false);
@@ -505,6 +520,33 @@ function UserManagementPage() {
     setPasswordOpen(true);
   }
 
+  async function openRoleBindingModal(record: UserRecord) {
+    try {
+      setRoleBindingLoading(true);
+      setRoleBindingTargetUser(record);
+      roleBindingForm.resetFields();
+
+      // 关联角色和当前用户详情同时加载，是为了让可选角色与已绑定角色保持同一时刻的数据快照，
+      // 避免角色刚被修改后弹框仍显示旧值。
+      const [detail, roleList] = await Promise.all([
+        fetchUserDetail(record.id),
+        fetchRoleList(),
+      ]);
+
+      setRoleOptions(roleList);
+      roleBindingForm.setFieldsValue({
+        roleIds: detail.roles.map((role) => role.id),
+      });
+      setRoleBindingOpen(true);
+    } catch (error) {
+      if (isUserMock && error instanceof Error) {
+        message.error(error.message);
+      }
+    } finally {
+      setRoleBindingLoading(false);
+    }
+  }
+
   async function handleSubmitResetPassword(values: ResetPasswordFormValues) {
     if (!passwordTargetUser) {
       return;
@@ -525,6 +567,37 @@ function UserManagementPage() {
       }
     } finally {
       setPasswordSubmitting(false);
+    }
+  }
+
+  async function handleSubmitRoleBinding(values: UserRoleBindingFormValues) {
+    if (!roleBindingTargetUser) {
+      return;
+    }
+
+    try {
+      setRoleBindingSubmitting(true);
+      const payload: UpdateUserRolesPayload = {
+        userId: roleBindingTargetUser.id,
+        roleIds: values.roleIds ?? [],
+      };
+
+      await updateUserRoles(payload);
+      message.success('用户角色关联成功');
+      setRoleBindingOpen(false);
+      setRoleBindingTargetUser(null);
+      roleBindingForm.resetFields();
+      triggerReload();
+
+      if (detailRecord?.id === payload.userId) {
+        void loadDetail(payload.userId, false);
+      }
+    } catch (error) {
+      if (isUserMock && error instanceof Error) {
+        message.error(error.message);
+      }
+    } finally {
+      setRoleBindingSubmitting(false);
     }
   }
 
@@ -720,7 +793,7 @@ function UserManagementPage() {
     {
       key: 'action',
       title: '操作',
-      width: 440,
+      width: 520,
       render: (_, record) => (
         <Space size={4} wrap>
           <Button onClick={() => void loadDetail(record.id)} size="small" type="link">
@@ -741,6 +814,14 @@ function UserManagementPage() {
             type="link"
           >
             关联组织
+          </PermissionButton>
+          <PermissionButton
+            onClick={() => void openRoleBindingModal(record)}
+            permissionCode="system:user:assign-role"
+            size="small"
+            type="link"
+          >
+            关联角色
           </PermissionButton>
           <PermissionButton
             onClick={() => void handleToggleUserStatus(record)}
@@ -989,6 +1070,51 @@ function UserManagementPage() {
               正在加载用户详情，请稍候
             </Tag>
           )}
+        </Form>
+      </Modal>
+
+      <Modal
+        confirmLoading={roleBindingSubmitting}
+        destroyOnHidden
+        onCancel={() => {
+          setRoleBindingOpen(false);
+          setRoleBindingTargetUser(null);
+          roleBindingForm.resetFields();
+        }}
+        okButtonProps={{
+          loading: roleBindingSubmitting,
+        }}
+        okText="保存关联"
+        onOk={() => void roleBindingForm.submit()}
+        open={roleBindingOpen}
+        title="关联角色"
+      >
+        <Form<UserRoleBindingFormValues>
+          form={roleBindingForm}
+          layout="vertical"
+          onFinish={handleSubmitRoleBinding}
+        >
+          <Form.Item label="目标账号">
+            <Input disabled value={roleBindingTargetUser?.username || ''} />
+          </Form.Item>
+          <Form.Item
+            extra="支持多选；如果需要移除全部角色，直接清空后保存即可。"
+            label="所属角色"
+            name="roleIds"
+          >
+            <Select
+              allowClear
+              loading={roleBindingLoading}
+              mode="multiple"
+              optionFilterProp="label"
+              options={roleOptions.map((role) => ({
+                label: role.status === 1 ? `${role.name}（${role.code}）` : `${role.name}（${role.code}，停用）`,
+                value: role.id,
+              }))}
+              placeholder="请选择角色"
+              showSearch
+            />
+          </Form.Item>
         </Form>
       </Modal>
 

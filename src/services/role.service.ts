@@ -1,3 +1,7 @@
+import {
+  getDataScopeLabelByCode,
+  type DataScopeCode,
+} from '@/constants/select-options';
 import { mockRoles } from '@/mock/system';
 import { API_ENDPOINTS } from '@/services/api-endpoints';
 import { request } from '@/services/http';
@@ -12,7 +16,7 @@ export interface RoleRecord {
   status: number;
   statusMsg: string;
   sortOrder?: number;
-  dataScope?: number;
+  dataScope?: DataScopeCode;
   dataScopeMsg?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -33,6 +37,12 @@ export interface RolePageResult {
   total: number;
   totalPages: number;
   records: RoleRecord[];
+}
+
+export interface RoleListQuery {
+  name?: string;
+  code?: string;
+  status?: number;
 }
 
 export interface CreateRolePayload {
@@ -57,6 +67,12 @@ export interface UpdateRoleStatusPayload {
 export interface DeleteRolesPayload {
   id?: number;
   idList?: number[];
+}
+
+export interface UpdateRoleDataScopePayload {
+  roleId: number;
+  dataScope: DataScopeCode;
+  deptIds?: number[];
 }
 
 const useRoleMock = import.meta.env.VITE_USE_ROLE_MOCK
@@ -91,6 +107,17 @@ function buildMockPageResult(query: RolePageQuery): RolePageResult {
     totalPages: Math.max(1, Math.ceil(filtered.length / query.pageSize)),
     records,
   };
+}
+
+function filterMockRoles(query: RoleListQuery = {}) {
+  return mockRoleDb.filter((role) => {
+    const matchedName = query.name ? role.name.includes(query.name) : true;
+    const matchedCode = query.code ? role.code.includes(query.code) : true;
+    const matchedStatus =
+      typeof query.status === 'number' ? role.status === query.status : true;
+
+    return matchedName && matchedCode && matchedStatus;
+  });
 }
 
 function findMockRoleOrThrow(id: number) {
@@ -134,6 +161,18 @@ export async function fetchRolePage(query: RolePageQuery) {
   });
 }
 
+export async function fetchRoleList(query: RoleListQuery = {}) {
+  if (useRoleMock) {
+    return Promise.resolve(filterMockRoles(query).map((role) => cloneMockRole(role)));
+  }
+
+  return request<RoleRecord[]>({
+    method: 'get',
+    params: query,
+    url: API_ENDPOINTS.role.list,
+  });
+}
+
 export async function fetchRoleDetail(id: number) {
   if (useRoleMock) {
     return Promise.resolve(cloneMockRole(findMockRoleOrThrow(id)));
@@ -165,7 +204,7 @@ export async function createRole(payload: CreateRolePayload) {
       status: 1,
       statusMsg: '正常',
       sortOrder: payload.sortOrder ?? nextId,
-      dataScope: 1,
+      dataScope: 'ALL',
       dataScopeMsg: '全部数据',
       createdAt: now,
       updatedAt: now,
@@ -244,5 +283,31 @@ export async function deleteRoles(payload: DeleteRolesPayload) {
     data: payload,
     method: 'post',
     url: API_ENDPOINTS.role.delete,
+  });
+}
+
+export async function updateRoleDataScope(payload: UpdateRoleDataScopePayload) {
+  if (useRoleMock) {
+    const targetRole = findMockRoleOrThrow(payload.roleId);
+
+    Object.assign(targetRole, {
+      dataScope: payload.dataScope,
+      dataScopeMsg: getDataScopeLabelByCode(payload.dataScope),
+      customDeptIds:
+        payload.dataScope === 'CUSTOM_DEPT' ? [...(payload.deptIds ?? [])] : [],
+      updatedAt: new Date().toISOString().replace('T', ' ').slice(0, 19),
+    });
+
+    return Promise.resolve(cloneMockRole(targetRole));
+  }
+
+  return request<Record<string, never>>({
+    data: {
+      roleId: payload.roleId,
+      dataScope: payload.dataScope,
+      deptIds: payload.dataScope === 'CUSTOM_DEPT' ? payload.deptIds ?? [] : [],
+    },
+    method: 'post',
+    url: API_ENDPOINTS.role.updateDataScope,
   });
 }

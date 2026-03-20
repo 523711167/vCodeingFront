@@ -13,20 +13,29 @@ import {
   Space,
   Table,
   Tag,
+  TreeSelect,
 } from 'antd';
 import PageContainer from '@/components/PageContainer';
 import PermissionButton from '@/components/PermissionButton';
+import {
+  DATA_SCOPE_OPTIONS,
+  getDataScopeLabelByCode,
+  type DataScopeCode,
+} from '@/constants/select-options';
+import { fetchDeptTree, type DeptTreeRecord } from '@/services/dept.service';
 import {
   createRole,
   deleteRoles,
   fetchRoleDetail,
   fetchRolePage,
+  updateRoleDataScope,
   updateRole,
   updateRoleStatus,
   type CreateRolePayload,
   type RolePageQuery,
   type RolePageResult,
   type RoleRecord,
+  type UpdateRoleDataScopePayload,
   type UpdateRolePayload,
 } from '@/services/role.service';
 
@@ -49,6 +58,17 @@ interface RoleFormValues {
   sortOrder?: number;
 }
 
+interface RoleDataScopeFormValues {
+  dataScope: DataScopeCode;
+  deptIds?: number[];
+}
+
+interface DeptTreeSelectOption {
+  title: string;
+  value: number;
+  children?: DeptTreeSelectOption[];
+}
+
 const initialPageQuery: RolePageQuery = {
   pageNum: 1,
   pageSize: 10,
@@ -58,10 +78,26 @@ function getStatusTagColor(status: number) {
   return status === 1 ? 'green' : 'default';
 }
 
+function buildDeptTreeSelectData(nodes: DeptTreeRecord[]): DeptTreeSelectOption[] {
+  return nodes.map((node) => ({
+    title: node.name,
+    value: node.id,
+    children: node.children ? buildDeptTreeSelectData(node.children) : undefined,
+  }));
+}
+
+function flattenDeptTree(nodes: DeptTreeRecord[]): DeptTreeRecord[] {
+  return nodes.flatMap((node) => [
+    node,
+    ...flattenDeptTree(node.children ?? []),
+  ]);
+}
+
 function RoleManagementPage() {
   const { message, modal } = AntdApp.useApp();
   const [searchForm] = Form.useForm<SearchFormValues>();
   const [roleForm] = Form.useForm<RoleFormValues>();
+  const [dataScopeForm] = Form.useForm<RoleDataScopeFormValues>();
   const [query, setQuery] = useState<RolePageQuery>(initialPageQuery);
   const [reloadVersion, setReloadVersion] = useState(0);
   const [pageData, setPageData] = useState<RolePageResult>({
@@ -79,6 +115,15 @@ function RoleManagementPage() {
   const [editorLoading, setEditorLoading] = useState(false);
   const [editorSubmitting, setEditorSubmitting] = useState(false);
   const [editingRoleId, setEditingRoleId] = useState<number | null>(null);
+  const [dataScopeOpen, setDataScopeOpen] = useState(false);
+  const [dataScopeLoading, setDataScopeLoading] = useState(false);
+  const [dataScopeSubmitting, setDataScopeSubmitting] = useState(false);
+  const [dataScopeTargetRole, setDataScopeTargetRole] = useState<RoleRecord | null>(null);
+  const [deptTreeData, setDeptTreeData] = useState<DeptTreeRecord[]>([]);
+  const selectedDataScope = Form.useWatch('dataScope', dataScopeForm);
+  const deptNameMap = new Map(
+    flattenDeptTree(deptTreeData).map((dept) => [dept.id, dept.name] as const),
+  );
 
   useEffect(() => {
     let canceled = false;
@@ -109,6 +154,32 @@ function RoleManagementPage() {
       canceled = true;
     };
   }, [message, query, reloadVersion]);
+
+  useEffect(() => {
+    let canceled = false;
+
+    async function run() {
+      try {
+        const deptTree = await fetchDeptTree();
+
+        if (!canceled) {
+          // 角色数据权限里的“自定义部门”直接复用组织树，
+          // 这样详情展示和编辑提交都能共享同一份组织基础数据。
+          setDeptTreeData(deptTree);
+        }
+      } catch (error) {
+        if (!canceled && isRoleMock && error instanceof Error) {
+          message.error(error.message);
+        }
+      }
+    }
+
+    void run();
+
+    return () => {
+      canceled = true;
+    };
+  }, [message]);
 
   async function loadDetail(roleId: number, openDrawer = true) {
     try {
@@ -270,6 +341,69 @@ function RoleManagementPage() {
     });
   }
 
+  async function openDataScopeModal(roleId: number) {
+    try {
+      setDataScopeLoading(true);
+      const detail = await fetchRoleDetail(roleId);
+      const currentDataScope = detail.dataScope ?? 'ALL';
+
+      setDataScopeTargetRole(detail);
+      dataScopeForm.setFieldsValue({
+        dataScope: currentDataScope,
+        deptIds: detail.customDeptIds,
+      });
+      setDataScopeOpen(true);
+    } catch (error) {
+      if (isRoleMock && error instanceof Error) {
+        message.error(error.message);
+      }
+    } finally {
+      setDataScopeLoading(false);
+    }
+  }
+
+  async function handleSubmitDataScope(values: RoleDataScopeFormValues) {
+    if (!dataScopeTargetRole) {
+      return;
+    }
+
+    if (values.dataScope === 'CUSTOM_DEPT' && !(values.deptIds?.length)) {
+      dataScopeForm.setFields([
+        {
+          name: 'deptIds',
+          errors: ['请选择自定义部门'],
+        },
+      ]);
+      return;
+    }
+
+    try {
+      setDataScopeSubmitting(true);
+      const payload: UpdateRoleDataScopePayload = {
+        roleId: dataScopeTargetRole.id,
+        dataScope: values.dataScope,
+        deptIds: values.dataScope === 'CUSTOM_DEPT' ? values.deptIds ?? [] : [],
+      };
+
+      await updateRoleDataScope(payload);
+      message.success('角色数据权限更新成功');
+      setDataScopeOpen(false);
+      setDataScopeTargetRole(null);
+      dataScopeForm.resetFields();
+      triggerReload();
+
+      if (detailRecord?.id === payload.roleId) {
+        void loadDetail(payload.roleId, false);
+      }
+    } catch (error) {
+      if (isRoleMock && error instanceof Error) {
+        message.error(error.message);
+      }
+    } finally {
+      setDataScopeSubmitting(false);
+    }
+  }
+
   const columns: ColumnsType<RoleRecord> = [
     {
       dataIndex: 'name',
@@ -304,7 +438,7 @@ function RoleManagementPage() {
     {
       key: 'action',
       title: '操作',
-      width: 300,
+      width: 380,
       render: (_, record) => (
         <Space size={4} wrap>
           <Button onClick={() => void loadDetail(record.id)} size="small" type="link">
@@ -317,6 +451,14 @@ function RoleManagementPage() {
             type="link"
           >
             编辑
+          </PermissionButton>
+          <PermissionButton
+            onClick={() => void openDataScopeModal(record.id)}
+            permissionCode="system:role:data-scope"
+            size="small"
+            type="link"
+          >
+            数据权限
           </PermissionButton>
           <PermissionButton
             onClick={() => void handleToggleRoleStatus(record)}
@@ -342,7 +484,7 @@ function RoleManagementPage() {
 
   return (
     <PageContainer
-      description="角色管理页当前已对接真实角色接口，支持分页查询、详情、新增、修改、状态切换和删除。"
+      description="角色管理页当前已对接真实角色接口，支持分页查询、详情、新增、修改、数据权限配置、状态切换和删除。"
       title="角色管理"
     >
       <Space className="toolbar" direction="vertical" size={16}>
@@ -475,7 +617,14 @@ function RoleManagementPage() {
               {detailRecord.sortOrder ?? '-'}
             </Descriptions.Item>
             <Descriptions.Item label="数据权限范围">
-              {detailRecord.dataScopeMsg || '-'}
+              {detailRecord.dataScopeMsg || getDataScopeLabelByCode(detailRecord.dataScope)}
+            </Descriptions.Item>
+            <Descriptions.Item label="自定义部门">
+              {detailRecord.customDeptIds.length
+                ? detailRecord.customDeptIds
+                    .map((deptId) => deptNameMap.get(deptId) ?? String(deptId))
+                    .join('、')
+                : '-'}
             </Descriptions.Item>
             <Descriptions.Item label="创建时间">
               {detailRecord.createdAt || '-'}
@@ -486,6 +635,62 @@ function RoleManagementPage() {
           </Descriptions>
         )}
       </Drawer>
+
+      <Modal
+        confirmLoading={dataScopeSubmitting}
+        destroyOnClose
+        onCancel={() => {
+          setDataScopeOpen(false);
+          setDataScopeTargetRole(null);
+          dataScopeForm.resetFields();
+        }}
+        onOk={() => void dataScopeForm.submit()}
+        open={dataScopeOpen}
+        title="配置数据权限"
+      >
+        <Form<RoleDataScopeFormValues>
+          form={dataScopeForm}
+          layout="vertical"
+          onFinish={(values) => void handleSubmitDataScope(values)}
+        >
+          <Form.Item label="目标角色">
+            <Input disabled value={dataScopeTargetRole?.name || ''} />
+          </Form.Item>
+          <Form.Item
+            label="数据权限范围"
+            name="dataScope"
+            rules={[{ required: true, message: '请选择数据权限范围' }]}
+          >
+            <Select
+              loading={dataScopeLoading}
+              options={DATA_SCOPE_OPTIONS.map((option) => ({
+                label: option.value,
+                value: option.key,
+              }))}
+              placeholder="请选择数据权限范围"
+            />
+          </Form.Item>
+          {selectedDataScope === 'CUSTOM_DEPT' && (
+            <Form.Item
+              extra="仅在“自定义部门”时需要选择组织。"
+              label="自定义部门"
+              name="deptIds"
+            >
+              <TreeSelect
+                allowClear
+                loading={dataScopeLoading}
+                multiple
+                placeholder="请选择自定义部门"
+                showSearch
+                style={{ width: '100%' }}
+                treeCheckable
+                treeData={buildDeptTreeSelectData(deptTreeData)}
+                treeDefaultExpandAll
+              />
+            </Form.Item>
+          )}
+        </Form>
+      </Modal>
 
       <Modal
         confirmLoading={editorSubmitting}

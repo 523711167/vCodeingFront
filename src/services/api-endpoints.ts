@@ -40,6 +40,7 @@ export const API_ENDPOINTS = {
     create: '/sys/user/create',
     delete: '/sys/user/delete',
     updateDepts: '/sys/user/depts/update',
+    updateRoles: '/sys/user/roles/update',
     detail: '/sys/user/detail',
     page: '/sys/user/page',
     resetPassword: '/sys/user/password/reset',
@@ -48,8 +49,10 @@ export const API_ENDPOINTS = {
   },
   role: {
     create: '/sys/role/create',
+    updateDataScope: '/sys/role/data-scope/update',
     delete: '/sys/role/delete',
     detail: '/sys/role/detail',
+    list: '/sys/role/list',
     page: '/sys/role/page',
     update: '/sys/role/update',
     updateStatus: '/sys/role/status/update',
