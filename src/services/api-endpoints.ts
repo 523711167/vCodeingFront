@@ -39,6 +39,7 @@ export const API_ENDPOINTS = {
   user: {
     create: '/sys/user/create',
     delete: '/sys/user/delete',
+    updateDepts: '/sys/user/depts/update',
     detail: '/sys/user/detail',
     page: '/sys/user/page',
     resetPassword: '/sys/user/password/reset',

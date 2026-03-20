@@ -12,9 +12,12 @@ import {
   Space,
   Table,
   Tag,
+  TreeSelect,
 } from 'antd';
 import PageContainer from '@/components/PageContainer';
 import PermissionButton from '@/components/PermissionButton';
+import type { DeptTreeRecord } from '@/services/dept.service';
+import { fetchDeptTree } from '@/services/dept.service';
 import {
   createUser,
   deleteUsers,
@@ -22,9 +25,11 @@ import {
   fetchUserPage,
   resetUserPassword,
   updateUser,
+  updateUserDepts,
   updateUserStatus,
   type CreateUserPayload,
   type UpdateUserPayload,
+  type UpdateUserDeptsPayload,
   type UserPageQuery,
   type UserPageResult,
   type UserRecord,
@@ -52,6 +57,17 @@ interface ResetPasswordFormValues {
   newPassword: string;
 }
 
+interface UserDeptBindingFormValues {
+  deptIds?: number[];
+  primaryDeptId?: number;
+}
+
+interface DeptTreeSelectOption {
+  title: string;
+  value: number;
+  children?: DeptTreeSelectOption[];
+}
+
 const initialPageQuery: UserPageQuery = {
   pageNum: 1,
   pageSize: 10,
@@ -75,11 +91,27 @@ function formatDeptNames(record: UserRecord) {
     : '-';
 }
 
+function buildDeptTreeSelectData(nodes: DeptTreeRecord[]): DeptTreeSelectOption[] {
+  return nodes.map((node) => ({
+    title: node.name,
+    value: node.id,
+    children: node.children ? buildDeptTreeSelectData(node.children) : undefined,
+  }));
+}
+
+function flattenDeptTree(nodes: DeptTreeRecord[]): DeptTreeRecord[] {
+  return nodes.flatMap((node) => [
+    node,
+    ...flattenDeptTree(node.children ?? []),
+  ]);
+}
+
 function UserManagementPage() {
   const { message, modal } = AntdApp.useApp();
   const [searchForm] = Form.useForm<SearchFormValues>();
   const [userForm] = Form.useForm<UserFormValues>();
   const [passwordForm] = Form.useForm<ResetPasswordFormValues>();
+  const [deptBindingForm] = Form.useForm<UserDeptBindingFormValues>();
   const [query, setQuery] = useState<UserPageQuery>(initialPageQuery);
   const [reloadVersion, setReloadVersion] = useState(0);
   const [pageData, setPageData] = useState<UserPageResult>({
@@ -100,6 +132,21 @@ function UserManagementPage() {
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [passwordSubmitting, setPasswordSubmitting] = useState(false);
   const [passwordTargetUser, setPasswordTargetUser] = useState<UserRecord | null>(null);
+  const [deptBindingOpen, setDeptBindingOpen] = useState(false);
+  const [deptBindingLoading, setDeptBindingLoading] = useState(false);
+  const [deptBindingSubmitting, setDeptBindingSubmitting] = useState(false);
+  const [deptBindingTargetUser, setDeptBindingTargetUser] = useState<UserRecord | null>(
+    null,
+  );
+  const [deptTreeData, setDeptTreeData] = useState<DeptTreeRecord[]>([]);
+  const selectedDeptIds = Form.useWatch('deptIds', deptBindingForm) ?? [];
+  const deptFlatOptions = flattenDeptTree(deptTreeData).map((dept) => ({
+    label: dept.name,
+    value: dept.id,
+  }));
+  const selectedDeptOptions = deptFlatOptions.filter((option) =>
+    selectedDeptIds.includes(option.value),
+  );
 
   useEffect(() => {
     let canceled = false;
@@ -324,6 +371,94 @@ function UserManagementPage() {
     });
   }
 
+  async function openDeptBindingModal(record: UserRecord) {
+    try {
+      setDeptBindingLoading(true);
+      setDeptBindingTargetUser(record);
+      deptBindingForm.resetFields();
+
+      // 关联组织弹框同时拉用户详情和完整组织树，是为了保证“当前已关联组织”
+      // 与“可选组织列表”来自同一时刻的数据，避免列表页缓存导致默认值不准确。
+      const [detail, deptTree] = await Promise.all([
+        fetchUserDetail(record.id),
+        fetchDeptTree(),
+      ]);
+      const primaryDept = detail.depts.find((dept) => dept.isPrimary === 1);
+
+      setDeptTreeData(deptTree);
+      deptBindingForm.setFieldsValue({
+        deptIds: detail.depts.map((dept) => dept.id),
+        primaryDeptId: primaryDept?.id,
+      });
+      setDeptBindingOpen(true);
+    } catch (error) {
+      if (isUserMock && error instanceof Error) {
+        message.error(error.message);
+      }
+    } finally {
+      setDeptBindingLoading(false);
+    }
+  }
+
+  function handleDeptIdsChange(nextDeptIds: number[]) {
+    const currentPrimaryDeptId = deptBindingForm.getFieldValue('primaryDeptId');
+
+    if (!nextDeptIds.length) {
+      deptBindingForm.setFieldValue('primaryDeptId', undefined);
+      return;
+    }
+
+    if (!currentPrimaryDeptId || !nextDeptIds.includes(currentPrimaryDeptId)) {
+      deptBindingForm.setFieldValue('primaryDeptId', nextDeptIds[0]);
+    }
+  }
+
+  async function handleSubmitDeptBinding(values: UserDeptBindingFormValues) {
+    if (!deptBindingTargetUser) {
+      return;
+    }
+
+    const deptIds = values.deptIds ?? [];
+
+    if (deptIds.length > 0 && !values.primaryDeptId) {
+      deptBindingForm.setFields([
+        {
+          errors: ['请选择主组织'],
+          name: 'primaryDeptId',
+        },
+      ]);
+      return;
+    }
+
+    try {
+      setDeptBindingSubmitting(true);
+      const payload: UpdateUserDeptsPayload = {
+        userId: deptBindingTargetUser.id,
+        depts: deptIds.map((deptId) => ({
+          deptId,
+          isPrimary: deptId === values.primaryDeptId ? 1 : 0,
+        })),
+      };
+
+      await updateUserDepts(payload);
+      message.success('用户组织关联成功');
+      setDeptBindingOpen(false);
+      setDeptBindingTargetUser(null);
+      deptBindingForm.resetFields();
+      triggerReload();
+
+      if (detailRecord?.id === payload.userId) {
+        void loadDetail(payload.userId, false);
+      }
+    } catch (error) {
+      if (isUserMock && error instanceof Error) {
+        message.error(error.message);
+      }
+    } finally {
+      setDeptBindingSubmitting(false);
+    }
+  }
+
   const columns: ColumnsType<UserRecord> = [
     {
       dataIndex: 'username',
@@ -363,7 +498,7 @@ function UserManagementPage() {
     {
       key: 'action',
       title: '操作',
-      width: 360,
+      width: 440,
       render: (_, record) => (
         <Space size={4} wrap>
           <Button onClick={() => void loadDetail(record.id)} size="small" type="link">
@@ -376,6 +511,14 @@ function UserManagementPage() {
             type="link"
           >
             编辑
+          </PermissionButton>
+          <PermissionButton
+            onClick={() => void openDeptBindingModal(record)}
+            permissionCode="system:user:assign-dept"
+            size="small"
+            type="link"
+          >
+            关联组织
           </PermissionButton>
           <PermissionButton
             onClick={() => void handleToggleUserStatus(record)}
@@ -409,7 +552,7 @@ function UserManagementPage() {
 
   return (
     <PageContainer
-      description="账号管理页当前已对接真实用户接口，支持分页查询、详情、新增、修改、状态切换、密码重置和删除。"
+      description="账号管理页当前已对接真实用户接口，支持分页查询、详情、新增、修改、关联组织、状态切换、密码重置和删除。"
       extra={
         <PermissionButton
           onClick={() => void openCreateModal()}
@@ -621,6 +764,73 @@ function UserManagementPage() {
               正在加载用户详情，请稍候
             </Tag>
           )}
+        </Form>
+      </Modal>
+
+      <Modal
+        confirmLoading={deptBindingSubmitting}
+        destroyOnHidden
+        onCancel={() => {
+          setDeptBindingOpen(false);
+          setDeptBindingTargetUser(null);
+          deptBindingForm.resetFields();
+        }}
+        okButtonProps={{
+          loading: deptBindingSubmitting,
+        }}
+        okText="保存关联"
+        onOk={() => void deptBindingForm.submit()}
+        open={deptBindingOpen}
+        title="关联组织"
+      >
+        <Form<UserDeptBindingFormValues>
+          form={deptBindingForm}
+          layout="vertical"
+          onFinish={handleSubmitDeptBinding}
+        >
+          <Form.Item label="目标账号">
+            <Input disabled value={deptBindingTargetUser?.username || ''} />
+          </Form.Item>
+          <Form.Item
+            extra="可选择多个组织；如果需要移除全部组织，直接清空后保存即可。"
+            label="所属组织"
+            name="deptIds"
+          >
+            <TreeSelect
+              allowClear
+              loading={deptBindingLoading}
+              multiple
+              onChange={(value) => handleDeptIdsChange(value as number[])}
+              placeholder="请选择组织"
+              style={{ width: '100%' }}
+              treeData={buildDeptTreeSelectData(deptTreeData)}
+              treeDefaultExpandAll
+            />
+          </Form.Item>
+          <Form.Item
+            label="主组织"
+            name="primaryDeptId"
+            rules={[
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  const deptIds = (getFieldValue('deptIds') ?? []) as number[];
+
+                  if (!deptIds.length || value) {
+                    return Promise.resolve();
+                  }
+
+                  return Promise.reject(new Error('请选择主组织'));
+                },
+              }),
+            ]}
+          >
+            <Select
+              allowClear
+              disabled={!selectedDeptOptions.length}
+              options={selectedDeptOptions}
+              placeholder="请选择主组织"
+            />
+          </Form.Item>
         </Form>
       </Modal>
 

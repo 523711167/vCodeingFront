@@ -1,4 +1,5 @@
 import { API_ENDPOINTS } from '@/services/api-endpoints';
+import { fetchDeptTree, type DeptTreeRecord } from '@/services/dept.service';
 import { request } from '@/services/http';
 import { mockUsers } from '@/mock/system';
 
@@ -85,6 +86,16 @@ export interface DeleteUsersPayload {
   idList: number[];
 }
 
+export interface UpdateUserDeptItemPayload {
+  deptId: number;
+  isPrimary: 0 | 1;
+}
+
+export interface UpdateUserDeptsPayload {
+  userId: number;
+  depts: UpdateUserDeptItemPayload[];
+}
+
 const useUserMock = import.meta.env.VITE_USE_USER_MOCK
   ? import.meta.env.VITE_USE_USER_MOCK !== 'false'
   : import.meta.env.VITE_USE_MOCK !== 'false';
@@ -131,6 +142,13 @@ function cloneMockUser(user: UserRecord): UserRecord {
     depts: [...user.depts],
     roles: [...user.roles],
   };
+}
+
+function flattenDeptTree(nodes: DeptTreeRecord[]): DeptTreeRecord[] {
+  return nodes.flatMap((node) => [
+    node,
+    ...flattenDeptTree(node.children ?? []),
+  ]);
 }
 
 export async function fetchUserPage(query: UserPageQuery) {
@@ -262,5 +280,46 @@ export async function deleteUsers(payload: DeleteUsersPayload) {
     data: payload,
     method: 'post',
     url: API_ENDPOINTS.user.delete,
+  });
+}
+
+export async function updateUserDepts(payload: UpdateUserDeptsPayload) {
+  if (useUserMock) {
+    const targetUser = findMockUserOrThrow(payload.userId);
+    const deptTree = await fetchDeptTree();
+    const deptMap = new Map(
+      flattenDeptTree(deptTree).map((dept) => [dept.id, dept] as const),
+    );
+
+    // 这里把“用户关联组织”也复用组织树数据，是为了让 mock 模式下的组织名称、
+    // 负责人和状态始终跟当前组织管理页保持一致，后续扩展组织字段也只需要补这一处映射。
+    targetUser.depts = payload.depts.map((item) => {
+      const matchedDept = deptMap.get(item.deptId);
+
+      if (!matchedDept) {
+        throw new Error(`组织 ${item.deptId} 不存在`);
+      }
+
+      return {
+        id: matchedDept.id,
+        parentId: matchedDept.parentId,
+        name: matchedDept.name,
+        code: matchedDept.code ?? '',
+        leaderId: matchedDept.leaderId ?? 0,
+        leaderName: matchedDept.leaderName ?? '',
+        status: matchedDept.status,
+        isPrimary: item.isPrimary,
+        isPrimaryMsg: item.isPrimary === 1 ? '是' : '否',
+      };
+    });
+    targetUser.updatedAt = new Date().toISOString().replace('T', ' ').slice(0, 19);
+
+    return Promise.resolve(cloneMockUser(targetUser));
+  }
+
+  return request<Record<string, never>>({
+    data: payload,
+    method: 'post',
+    url: API_ENDPOINTS.user.updateDepts,
   });
 }
