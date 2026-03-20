@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type MouseEvent } from 'react';
 import type { ColumnsType } from 'antd/es/table';
 import {
   App as AntdApp,
@@ -86,11 +86,22 @@ function buildDeptTreeSelectData(nodes: DeptTreeRecord[]): DeptTreeSelectOption[
   }));
 }
 
-function flattenDeptTree(nodes: DeptTreeRecord[]): DeptTreeRecord[] {
-  return nodes.flatMap((node) => [
-    node,
-    ...flattenDeptTree(node.children ?? []),
-  ]);
+function buildDeptPathLabelMap(
+  nodes: DeptTreeRecord[],
+  parentPath = '',
+  labelMap = new Map<number, string>(),
+) {
+  nodes.forEach((node) => {
+    const currentPath = parentPath ? `${parentPath}-${node.name}` : node.name;
+
+    labelMap.set(node.id, currentPath);
+
+    if (node.children?.length) {
+      buildDeptPathLabelMap(node.children, currentPath, labelMap);
+    }
+  });
+
+  return labelMap;
 }
 
 function RoleManagementPage() {
@@ -121,9 +132,7 @@ function RoleManagementPage() {
   const [dataScopeTargetRole, setDataScopeTargetRole] = useState<RoleRecord | null>(null);
   const [deptTreeData, setDeptTreeData] = useState<DeptTreeRecord[]>([]);
   const selectedDataScope = Form.useWatch('dataScope', dataScopeForm);
-  const deptNameMap = new Map(
-    flattenDeptTree(deptTreeData).map((dept) => [dept.id, dept.name] as const),
-  );
+  const deptPathLabelMap = buildDeptPathLabelMap(deptTreeData);
 
   useEffect(() => {
     let canceled = false;
@@ -404,6 +413,20 @@ function RoleManagementPage() {
     }
   }
 
+  function renderCustomDeptTag(props: {
+    value: number;
+    closable: boolean;
+    onClose: (event?: MouseEvent<HTMLElement>) => void;
+  }) {
+    const deptLabel = deptPathLabelMap.get(props.value) ?? String(props.value);
+
+    return (
+      <Tag closable={props.closable} onClose={props.onClose}>
+        {deptLabel}
+      </Tag>
+    );
+  }
+
   const columns: ColumnsType<RoleRecord> = [
     {
       dataIndex: 'name',
@@ -622,7 +645,7 @@ function RoleManagementPage() {
             <Descriptions.Item label="自定义部门">
               {detailRecord.customDeptIds.length
                 ? detailRecord.customDeptIds
-                    .map((deptId) => deptNameMap.get(deptId) ?? String(deptId))
+                    .map((deptId) => deptPathLabelMap.get(deptId) ?? String(deptId))
                     .join('、')
                 : '-'}
             </Descriptions.Item>
@@ -683,6 +706,7 @@ function RoleManagementPage() {
                 placeholder="请选择自定义部门"
                 showSearch
                 style={{ width: '100%' }}
+                tagRender={renderCustomDeptTag}
                 treeCheckable
                 treeData={buildDeptTreeSelectData(deptTreeData)}
                 treeDefaultExpandAll
