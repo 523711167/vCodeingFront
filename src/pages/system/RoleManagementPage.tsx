@@ -343,78 +343,80 @@ function RoleManagementPage() {
   return (
     <PageContainer
       description="角色管理页当前已对接真实角色接口，支持分页查询、详情、新增、修改、状态切换和删除。"
-      extra={
-        <PermissionButton
-          onClick={() => openCreateModal()}
-          permissionCode="system:role:create"
-          type="primary"
-        >
-          新增角色
-        </PermissionButton>
-      }
       title="角色管理"
     >
       <Space className="toolbar" direction="vertical" size={16}>
-        <Form<SearchFormValues>
-          form={searchForm}
-          layout="inline"
-          onFinish={(values) => {
-            const nextName = values.name?.trim() || undefined;
-            const nextCode = values.code?.trim() || undefined;
+        <div className="management-toolbar">
+          <Form<SearchFormValues>
+            className="management-toolbar__form"
+            form={searchForm}
+            layout="inline"
+            onFinish={(values) => {
+              const nextName = values.name?.trim() || undefined;
+              const nextCode = values.code?.trim() || undefined;
 
-            setQuery((previousQuery) => ({
-              ...previousQuery,
-              code: nextCode,
-              name: nextName,
-              pageNum:
-                previousQuery.name === nextName &&
-                previousQuery.code === nextCode &&
-                previousQuery.status === values.status
-                  ? previousQuery.pageNum
-                  : 1,
-              status: values.status,
-            }));
-          }}
-        >
-          <Form.Item label="角色名称" name="name">
-            <Input allowClear placeholder="请输入角色名称" />
-          </Form.Item>
-          <Form.Item label="角色编码" name="code">
-            <Input allowClear placeholder="请输入角色编码" />
-          </Form.Item>
-          <Form.Item label="状态" name="status">
-            <Select
-              allowClear
-              options={[
-                { label: '正常', value: 1 },
-                { label: '停用', value: 0 },
-              ]}
-              placeholder="请选择状态"
-              style={{ width: 160 }}
-            />
-          </Form.Item>
-          <Form.Item>
-            <Space>
-              <Button htmlType="submit" type="primary">
-                查询
-              </Button>
-              <Button
-                onClick={() => {
-                  searchForm.resetFields();
-                  setQuery((previousQuery) => ({
-                    ...previousQuery,
-                    code: undefined,
-                    name: undefined,
-                    pageNum: 1,
-                    status: undefined,
-                  }));
-                }}
-              >
-                重置
-              </Button>
-            </Space>
-          </Form.Item>
-        </Form>
+              setQuery((previousQuery) => ({
+                ...previousQuery,
+                code: nextCode,
+                name: nextName,
+                pageNum:
+                  previousQuery.name === nextName &&
+                  previousQuery.code === nextCode &&
+                  previousQuery.status === values.status
+                    ? previousQuery.pageNum
+                    : 1,
+                status: values.status,
+              }));
+            }}
+          >
+            <Form.Item label="角色名称" name="name">
+              <Input allowClear placeholder="请输入角色名称" />
+            </Form.Item>
+            <Form.Item label="角色编码" name="code">
+              <Input allowClear placeholder="请输入角色编码" />
+            </Form.Item>
+            <Form.Item label="状态" name="status">
+              <Select
+                allowClear
+                options={[
+                  { label: '正常', value: 1 },
+                  { label: '停用', value: 0 },
+                ]}
+                placeholder="请选择状态"
+                style={{ width: 160 }}
+              />
+            </Form.Item>
+            <Form.Item>
+              <Space>
+                <Button htmlType="submit" type="primary">
+                  查询
+                </Button>
+                <Button
+                  onClick={() => {
+                    searchForm.resetFields();
+                    setQuery((previousQuery) => ({
+                      ...previousQuery,
+                      code: undefined,
+                      name: undefined,
+                      pageNum: 1,
+                      status: undefined,
+                    }));
+                  }}
+                >
+                  重置
+                </Button>
+              </Space>
+            </Form.Item>
+          </Form>
+          {/* 角色管理复用通用工具栏布局，保证查询入口和新增动作与账号管理保持一致。 */}
+          <PermissionButton
+            onClick={() => openCreateModal()}
+            permissionCode="system:role:create"
+            type="primary"
+          >
+            新增角色
+          </PermissionButton>
+        </div>
 
         <Table
           columns={columns}

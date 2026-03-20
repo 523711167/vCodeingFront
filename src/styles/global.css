@@ -141,6 +141,30 @@ body {
   width: 100%;
 }
 
+/* 用户关联组织的多选框要求“已选内容”逐行展示。
+   这里单独挂类名，只影响该业务弹框，不去改动全局 Select / TreeSelect 的默认行为。 */
+.user-dept-tree-select .ant-select-selection-overflow-item {
+  flex: 0 0 100%;
+}
+
+/* 输入光标和搜索框也单独占一行，避免和已选组织路径挤在同一行里影响阅读。 */
+.user-dept-tree-select .ant-select-selection-overflow-item-suffix {
+  flex: 1 0 100%;
+}
+
+/* 系统管理列表页共用这条工具栏布局，让查询区和新增按钮稳定落在同一水平线上。 */
+.management-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+/* 查询表单本身允许换行，占满左侧可用空间，避免右侧按钮被挤压换行。 */
+.management-toolbar__form {
+  flex: 1 1 auto;
+}
+
 /* 小屏下优先保证留白和结构不挤压。 */
 @media (max-width: 992px) {
   .app-header {
@@ -152,6 +176,10 @@ body {
   }
 
   .page-container__header {
+    flex-direction: column;
+  }
+
+  .management-toolbar {
     flex-direction: column;
   }
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type MouseEvent } from 'react';
 import type { ColumnsType } from 'antd/es/table';
 import {
   App as AntdApp,
@@ -65,6 +65,7 @@ interface UserDeptBindingFormValues {
 interface DeptTreeSelectOption {
   title: string;
   value: number;
+  disabled?: boolean;
   children?: DeptTreeSelectOption[];
 }
 
@@ -83,19 +84,48 @@ function formatRoleNames(record: UserRecord) {
     : '-';
 }
 
-function formatDeptNames(record: UserRecord) {
+function formatPrimaryDeptName(
+  record: UserRecord,
+  deptPathLabelMap: Map<number, string>,
+) {
+  // 账号管理列表和详情只展示主组织，避免用户绑定多个组织后主列表信息过长。
+  // 后续如果需要补充“全部所属组织”，优先在详情弹框新增独立字段，而不是回退到这里拼接多项。
+  const primaryDept =
+    record.depts.find((dept) => dept.isPrimary === 1) ?? record.depts[0];
+
+  if (!primaryDept) {
+    return '-';
+  }
+
+  return deptPathLabelMap.get(primaryDept.id) ?? primaryDept.name;
+}
+
+function formatAllDeptNames(
+  record: UserRecord,
+  deptPathLabelMap: Map<number, string>,
+) {
   return record.depts.length
     ? record.depts
-        .map((dept) => `${dept.name}${dept.isPrimary === 1 ? '（主）' : ''}`)
+        .map((dept) => {
+          const deptLabel = deptPathLabelMap.get(dept.id) ?? dept.name;
+
+          return `${deptLabel}${dept.isPrimary === 1 ? '（主）' : ''}`;
+        })
         .join('、')
     : '-';
 }
 
-function buildDeptTreeSelectData(nodes: DeptTreeRecord[]): DeptTreeSelectOption[] {
+function buildDeptTreeSelectData(
+  nodes: DeptTreeRecord[],
+  disabledDeptIds: Set<number>,
+): DeptTreeSelectOption[] {
   return nodes.map((node) => ({
     title: node.name,
     value: node.id,
-    children: node.children ? buildDeptTreeSelectData(node.children) : undefined,
+    disabled: disabledDeptIds.has(node.id),
+    children: node.children
+      ? buildDeptTreeSelectData(node.children, disabledDeptIds)
+      : undefined,
   }));
 }
 
@@ -104,6 +134,130 @@ function flattenDeptTree(nodes: DeptTreeRecord[]): DeptTreeRecord[] {
     node,
     ...flattenDeptTree(node.children ?? []),
   ]);
+}
+
+function buildDeptPathLabelMap(
+  nodes: DeptTreeRecord[],
+  parentPath = '',
+  labelMap = new Map<number, string>(),
+) {
+  nodes.forEach((node) => {
+    const currentPath = parentPath ? `${parentPath}-${node.name}` : node.name;
+
+    labelMap.set(node.id, currentPath);
+
+    if (node.children?.length) {
+      buildDeptPathLabelMap(node.children, currentPath, labelMap);
+    }
+  });
+
+  return labelMap;
+}
+
+function buildDeptParentIdMap(
+  nodes: DeptTreeRecord[],
+  parentIdMap = new Map<number, number>(),
+) {
+  nodes.forEach((node) => {
+    parentIdMap.set(node.id, node.parentId);
+
+    if (node.children?.length) {
+      buildDeptParentIdMap(node.children, parentIdMap);
+    }
+  });
+
+  return parentIdMap;
+}
+
+function buildDeptDescendantIdsMap(
+  nodes: DeptTreeRecord[],
+  descendantIdsMap = new Map<number, number[]>(),
+) {
+  nodes.forEach((node) => {
+    const descendantIds = flattenDeptTree(node.children ?? []).map((child) => child.id);
+
+    descendantIdsMap.set(node.id, descendantIds);
+
+    if (node.children?.length) {
+      buildDeptDescendantIdsMap(node.children, descendantIdsMap);
+    }
+  });
+
+  return descendantIdsMap;
+}
+
+function collectAncestorDeptIds(
+  deptId: number,
+  parentIdMap: Map<number, number>,
+) {
+  const ancestorIds: number[] = [];
+  let currentParentId = parentIdMap.get(deptId);
+
+  while (typeof currentParentId === 'number' && currentParentId > 0) {
+    ancestorIds.push(currentParentId);
+    currentParentId = parentIdMap.get(currentParentId);
+  }
+
+  return ancestorIds;
+}
+
+function hasSelectedAncestorDept(
+  deptId: number,
+  selectedDeptIds: number[],
+  parentIdMap: Map<number, number>,
+) {
+  return collectAncestorDeptIds(deptId, parentIdMap).some((ancestorId) =>
+    selectedDeptIds.includes(ancestorId),
+  );
+}
+
+function normalizeSelectedDeptIds(
+  nextDeptIds: number[],
+  previousDeptIds: number[],
+  parentIdMap: Map<number, number>,
+  descendantIdsMap: Map<number, number[]>,
+) {
+  let normalizedDeptIds = previousDeptIds.filter((deptId) => nextDeptIds.includes(deptId));
+  const addedDeptIds = nextDeptIds.filter((deptId) => !previousDeptIds.includes(deptId));
+
+  addedDeptIds.forEach((deptId) => {
+    if (hasSelectedAncestorDept(deptId, normalizedDeptIds, parentIdMap)) {
+      return;
+    }
+
+    const descendantDeptIds = descendantIdsMap.get(deptId) ?? [];
+
+    normalizedDeptIds = normalizedDeptIds.filter(
+      (selectedDeptId) => !descendantDeptIds.includes(selectedDeptId),
+    );
+    normalizedDeptIds.push(deptId);
+  });
+
+  return normalizedDeptIds;
+}
+
+function buildDisabledDeptIds(
+  selectedDeptIds: number[],
+  parentIdMap: Map<number, number>,
+  descendantIdsMap: Map<number, number[]>,
+) {
+  const disabledDeptIds = new Set<number>();
+
+  selectedDeptIds.forEach((deptId) => {
+    collectAncestorDeptIds(deptId, parentIdMap).forEach((ancestorId) => {
+      disabledDeptIds.add(ancestorId);
+    });
+
+    (descendantIdsMap.get(deptId) ?? []).forEach((descendantId) => {
+      disabledDeptIds.add(descendantId);
+    });
+  });
+
+  selectedDeptIds.forEach((deptId) => {
+    disabledDeptIds.delete(deptId);
+  });
+
+  return disabledDeptIds;
 }
 
 function UserManagementPage() {
@@ -139,9 +293,17 @@ function UserManagementPage() {
     null,
   );
   const [deptTreeData, setDeptTreeData] = useState<DeptTreeRecord[]>([]);
+  const deptPathLabelMap = buildDeptPathLabelMap(deptTreeData);
+  const deptParentIdMap = buildDeptParentIdMap(deptTreeData);
+  const deptDescendantIdsMap = buildDeptDescendantIdsMap(deptTreeData);
   const selectedDeptIds = Form.useWatch('deptIds', deptBindingForm) ?? [];
+  const disabledDeptIds = buildDisabledDeptIds(
+    selectedDeptIds,
+    deptParentIdMap,
+    deptDescendantIdsMap,
+  );
   const deptFlatOptions = flattenDeptTree(deptTreeData).map((dept) => ({
-    label: dept.name,
+    label: deptPathLabelMap.get(dept.id) ?? dept.name,
     value: dept.id,
   }));
   const selectedDeptOptions = deptFlatOptions.filter((option) =>
@@ -177,6 +339,32 @@ function UserManagementPage() {
       canceled = true;
     };
   }, [message, query, reloadVersion]);
+
+  useEffect(() => {
+    let canceled = false;
+
+    async function run() {
+      try {
+        const deptTree = await fetchDeptTree();
+
+        if (!canceled) {
+          // 用户页缓存完整组织树，是为了让列表、详情和“关联组织”弹框
+          // 都能复用同一套层级路径展示规则，避免不同区域显示不一致。
+          setDeptTreeData(deptTree);
+        }
+      } catch (error) {
+        if (!canceled && isUserMock && error instanceof Error) {
+          message.error(error.message);
+        }
+      }
+    }
+
+    void run();
+
+    return () => {
+      canceled = true;
+    };
+  }, [message]);
 
   async function loadDetail(userId: number, openDrawer = true) {
     try {
@@ -401,16 +589,45 @@ function UserManagementPage() {
   }
 
   function handleDeptIdsChange(nextDeptIds: number[]) {
+    const normalizedDeptIds = normalizeSelectedDeptIds(
+      nextDeptIds,
+      selectedDeptIds,
+      deptParentIdMap,
+      deptDescendantIdsMap,
+    );
     const currentPrimaryDeptId = deptBindingForm.getFieldValue('primaryDeptId');
 
-    if (!nextDeptIds.length) {
+    deptBindingForm.setFieldValue('deptIds', normalizedDeptIds);
+
+    if (!normalizedDeptIds.length) {
       deptBindingForm.setFieldValue('primaryDeptId', undefined);
       return;
     }
 
-    if (!currentPrimaryDeptId || !nextDeptIds.includes(currentPrimaryDeptId)) {
-      deptBindingForm.setFieldValue('primaryDeptId', nextDeptIds[0]);
+    if (
+      !currentPrimaryDeptId ||
+      !normalizedDeptIds.includes(currentPrimaryDeptId)
+    ) {
+      deptBindingForm.setFieldValue('primaryDeptId', normalizedDeptIds[0]);
     }
+  }
+
+  function renderDeptBindingTag(props: {
+    value: number;
+    closable: boolean;
+    onClose: (event?: MouseEvent<HTMLElement>) => void;
+  }) {
+    const deptLabel = deptPathLabelMap.get(props.value) ?? String(props.value);
+
+    return (
+      <Tag
+        closable={props.closable}
+        onClose={props.onClose}
+        style={{ display: 'block', marginBottom: 4, marginInlineEnd: 0, width: '100%' }}
+      >
+        {deptLabel}
+      </Tag>
+    );
   }
 
   async function handleSubmitDeptBinding(values: UserDeptBindingFormValues) {
@@ -484,6 +701,11 @@ function UserManagementPage() {
       render: (_, record) => formatRoleNames(record),
     },
     {
+      key: 'depts',
+      title: '组织',
+      render: (_, record) => formatPrimaryDeptName(record, deptPathLabelMap),
+    },
+    {
       dataIndex: 'statusMsg',
       title: '状态',
       render: (_, record) => (
@@ -553,69 +775,72 @@ function UserManagementPage() {
   return (
     <PageContainer
       description="账号管理页当前已对接真实用户接口，支持分页查询、详情、新增、修改、关联组织、状态切换、密码重置和删除。"
-      extra={
-        <PermissionButton
-          onClick={() => void openCreateModal()}
-          permissionCode="system:user:create"
-          type="primary"
-        >
-          新增用户
-        </PermissionButton>
-      }
       title="账号管理"
     >
       <Space className="toolbar" direction="vertical" size={16}>
-        <Form<SearchFormValues>
-          form={searchForm}
-          layout="inline"
-          onFinish={(values) => {
-            setQuery((previousQuery) => ({
-              ...previousQuery,
-              pageNum:
-                previousQuery.username === (values.username?.trim() || undefined) &&
-                previousQuery.status === values.status
-                  ? previousQuery.pageNum
-                  : 1,
-              status: values.status,
-              username: values.username?.trim() || undefined,
-            }));
-          }}
-        >
-          <Form.Item label="账号" name="username">
-            <Input allowClear placeholder="请输入账号" />
-          </Form.Item>
-          <Form.Item label="状态" name="status">
-            <Select
-              allowClear
-              options={[
-                { label: '正常', value: 1 },
-                { label: '停用', value: 0 },
-              ]}
-              placeholder="请选择状态"
-              style={{ width: 160 }}
-            />
-          </Form.Item>
-          <Form.Item>
-            <Space>
-              <Button htmlType="submit" type="primary">
-                查询
-              </Button>
-              <Button
-                onClick={() => {
-                  searchForm.resetFields();
-                  setQuery((previousQuery) => ({
-                    ...previousQuery,
-                    pageNum: 1,
-                    status: undefined,
-                    username: undefined,
-                  }));
-                }}
-              >
-                重置
-              </Button>
-            </Space>
-          </Form.Item>
-        </Form>
+        <div className="management-toolbar">
+          <Form<SearchFormValues>
+            className="management-toolbar__form"
+            form={searchForm}
+            layout="inline"
+            onFinish={(values) => {
+              setQuery((previousQuery) => ({
+                ...previousQuery,
+                pageNum:
+                  previousQuery.username === (values.username?.trim() || undefined) &&
+                  previousQuery.status === values.status
+                    ? previousQuery.pageNum
+                    : 1,
+                status: values.status,
+                username: values.username?.trim() || undefined,
+              }));
+            }}
+          >
+            <Form.Item label="账号" name="username">
+              <Input allowClear placeholder="请输入账号" />
+            </Form.Item>
+            <Form.Item label="状态" name="status">
+              <Select
+                allowClear
+                options={[
+                  { label: '正常', value: 1 },
+                  { label: '停用', value: 0 },
+                ]}
+                placeholder="请选择状态"
+                style={{ width: 160 }}
+              />
+            </Form.Item>
+            <Form.Item>
+              <Space>
+                <Button htmlType="submit" type="primary">
+                  查询
+                </Button>
+                <Button
+                  onClick={() => {
+                    searchForm.resetFields();
+                    setQuery((previousQuery) => ({
+                      ...previousQuery,
+                      pageNum: 1,
+                      status: undefined,
+                      username: undefined,
+                    }));
+                  }}
+                >
+                  重置
+                </Button>
+              </Space>
+            </Form.Item>
+          </Form>
+          {/* 系统管理列表页把“查询区 + 新增按钮”收口到同一行，
+              是为了统一后台主操作入口的位置；后续其他管理页也直接复用这套结构。 */}
+          <PermissionButton
+            onClick={() => void openCreateModal()}
+            permissionCode="system:user:create"
+            type="primary"
+          >
+            新增用户
+          </PermissionButton>
+        </div>
 
         <Table
           columns={columns}
@@ -684,7 +909,7 @@ function UserManagementPage() {
               {formatRoleNames(detailRecord)}
             </Descriptions.Item>
             <Descriptions.Item label="组织">
-              {formatDeptNames(detailRecord)}
+              {formatAllDeptNames(detailRecord, deptPathLabelMap)}
             </Descriptions.Item>
             <Descriptions.Item label="最后登录时间">
               {detailRecord.lastLoginAt || '-'}
@@ -792,18 +1017,20 @@ function UserManagementPage() {
             <Input disabled value={deptBindingTargetUser?.username || ''} />
           </Form.Item>
           <Form.Item
-            extra="可选择多个组织；如果需要移除全部组织，直接清空后保存即可。"
+            extra="树节点保持原始名称展示；已选组织会按完整层级逐行展示，且父子节点不能同时选中。"
             label="所属组织"
             name="deptIds"
           >
             <TreeSelect
               allowClear
+              className="user-dept-tree-select"
               loading={deptBindingLoading}
               multiple
               onChange={(value) => handleDeptIdsChange(value as number[])}
               placeholder="请选择组织"
               style={{ width: '100%' }}
-              treeData={buildDeptTreeSelectData(deptTreeData)}
+              tagRender={renderDeptBindingTag}
+              treeData={buildDeptTreeSelectData(deptTreeData, disabledDeptIds)}
               treeDefaultExpandAll
             />
           </Form.Item>

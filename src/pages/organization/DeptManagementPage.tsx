@@ -514,7 +514,7 @@ function DeptManagementPage() {
             <Input maxLength={64} placeholder="请输入组织编码" />
           </Form.Item>
           {editingDeptId && (
-            <Form.Item label="主管用户ID" name="leaderId">
+            <Form.Item label="主管用户" name="leaderId">
               <InputNumber
                 min={1}
                 placeholder="请输入主管用户ID"
