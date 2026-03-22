@@ -143,6 +143,47 @@ function toMenuItems(routes: AppRouteItem[]): MenuProps['items'] {
     });
 }
 
+function findRouteByPath(routes: AppRouteItem[], targetPath: string): AppRouteItem | null {
+  for (const route of routes) {
+    if (route.path === targetPath) {
+      return route;
+    }
+
+    const matchedChild = findRouteByPath(route.children ?? [], targetPath);
+
+    if (matchedChild) {
+      return matchedChild;
+    }
+  }
+
+  return null;
+}
+
+function findAncestorPaths(
+  routes: AppRouteItem[],
+  pathname: string,
+  parents: string[] = [],
+): string[] | null {
+  for (const route of routes) {
+    const nextParents = [...parents, route.path];
+    const isMatch = matchPath({ path: route.path, end: true }, pathname);
+
+    if (isMatch) {
+      return parents;
+    }
+
+    if (route.children?.length) {
+      const matchedParents = findAncestorPaths(route.children, pathname, nextParents);
+
+      if (matchedParents) {
+        return matchedParents;
+      }
+    }
+  }
+
+  return null;
+}
+
 function findBreadcrumbItems(routes: AppRouteItem[], pathname: string) {
   const items: { title: string }[] = [];
 
@@ -213,6 +254,10 @@ function MainLayout({ routes }: MainLayoutProps) {
 
     return matched.length ? matched : [location.pathname];
   }, [location.pathname, routes]);
+  const matchedAncestorKeys = useMemo(
+    () => findAncestorPaths(routes, location.pathname) ?? [],
+    [location.pathname, routes],
+  );
 
   useEffect(() => {
     if (!flashState?.flashMessage) {
@@ -234,6 +279,23 @@ function MainLayout({ routes }: MainLayoutProps) {
     message,
     navigate,
   ]);
+
+  useEffect(() => {
+    // 当前页面位于某个二级菜单下时，需要把对应父目录自动展开；
+    // 否则目录节点不承接路由后，接口已返回的子菜单会因为处于折叠态而“看起来像没显示”。
+    setOpenKeys((currentOpenKeys) => {
+      const mergedOpenKeys = Array.from(new Set([...currentOpenKeys, ...matchedAncestorKeys]));
+
+      if (
+        mergedOpenKeys.length === currentOpenKeys.length &&
+        mergedOpenKeys.every((key, index) => key === currentOpenKeys[index])
+      ) {
+        return currentOpenKeys;
+      }
+
+      return mergedOpenKeys;
+    });
+  }, [matchedAncestorKeys]);
 
   const handleLogout = async () => {
     // 退出时先尽量通知后端撤销当前 access_token，再回收本地状态。
@@ -260,8 +322,17 @@ function MainLayout({ routes }: MainLayoutProps) {
         <Menu
           items={menuItems}
           mode="inline"
-          // 菜单 key 直接复用路由 path，这样点击后可以直接导航，减少一层映射关系。
-          onClick={({ key }) => navigate(String(key))}
+          // 目录节点只负责展开分组，不承接页面跳转；
+          // 只有真实页面菜单才执行 navigate，避免把目录型菜单误当成可访问路由。
+          onClick={({ key }) => {
+            const matchedRoute = findRouteByPath(routes, String(key));
+
+            if (!matchedRoute || matchedRoute.meta.routeEnabled === false) {
+              return;
+            }
+
+            navigate(String(key));
+          }}
           onOpenChange={(keys) => setOpenKeys(keys as string[])}
           openKeys={collapsed ? [] : openKeys}
           selectedKeys={selectedKeys}

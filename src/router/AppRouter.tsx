@@ -19,10 +19,12 @@ function toRelativePath(path: string) {
 function toRouteObjects(routes: AppRouteItem[]): RouteObject[] {
   // 业务路由定义里允许保留树形结构，便于菜单和权限表达。
   // React Router 最终消费的是扁平的 RouteObject，所以这里做一次转换。
-  return flattenRoutes(routes).map((route) => ({
-    path: toRelativePath(route.path),
-    element: route.element,
-  }));
+  return flattenRoutes(routes)
+    .filter((route) => route.meta.routeEnabled !== false)
+    .map((route) => ({
+      path: toRelativePath(route.path),
+      element: route.element,
+    }));
 }
 
 function toKnownModuleFallbacks(routes: AppRouteItem[]): RouteObject[] {

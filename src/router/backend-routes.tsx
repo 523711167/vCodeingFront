@@ -1,5 +1,4 @@
 import { createElement, type ComponentType } from 'react';
-import { Navigate } from 'react-router-dom';
 import type { MenuRecord } from '@/services/menu.service';
 import type { AppRouteItem } from '@/router/types';
 import NotFoundPage from '@/pages/exception/NotFoundPage';
@@ -17,43 +16,15 @@ function normalizePath(path?: string) {
   return path.startsWith('/') ? path : `/${path}`;
 }
 
-function getFirstAccessiblePath(menus: MenuRecord[]): string | null {
-  for (const menu of menus) {
-    if (menu.status !== 1) {
-      continue;
-    }
-
-    if (menu.type !== 'BUTTON' && menu.path) {
-      if (menu.type === 'MENU') {
-        return normalizePath(menu.path);
-      }
-
-      const childPath = getFirstAccessiblePath(menu.children ?? []);
-
-      if (childPath) {
-        return childPath;
-      }
-    }
-  }
-
-  return null;
-}
-
 function resolveRouteElement(menu: MenuRecord) {
   const normalizedComponent = menu.component?.trim();
 
-  // 目录节点通常只承担菜单分组职责，不直接对应页面组件。
-  // 这里统一跳转到它的第一个可访问子页面，避免前端再维护一份静态默认子路由。
   if (
-    menu.type === 'DIRECTORY' ||
     !normalizedComponent ||
-    normalizedComponent === 'layouts/RouteLayout'
-    ||
+    normalizedComponent === 'layouts/RouteLayout' ||
     normalizedComponent === 'RouteLayout'
   ) {
-    const redirectPath = getFirstAccessiblePath(menu.children ?? []);
-
-    return redirectPath ? <Navigate replace to={redirectPath} /> : <NotFoundPage />;
+    return <NotFoundPage />;
   }
 
   const modulePath = `../${normalizedComponent}.tsx`;
@@ -84,10 +55,13 @@ function toAppRouteItem(menu: MenuRecord): AppRouteItem | null {
 
   return {
     path: normalizePath(menu.path),
-    element: resolveRouteElement(menu),
+    // 目录节点继续保留在菜单树里，但不再承接页面跳转。
+    // element 这里只做占位，真正是否注册成 React Router 路由由 meta.routeEnabled 决定。
+    element: menu.type === 'MENU' ? resolveRouteElement(menu) : <NotFoundPage />,
     meta: {
       hidden: menu.visible === 0,
       icon: menu.icon,
+      routeEnabled: menu.type === 'MENU',
       title: menu.name,
     },
     children: children.length ? children : undefined,
@@ -104,5 +78,25 @@ export function buildBackendRoutes(menus: MenuRecord[]) {
 }
 
 export function getDefaultMenuPath(menus: MenuRecord[]) {
-  return getFirstAccessiblePath(menus) ?? '/403';
+  const walk = (nodes: MenuRecord[]): string | null => {
+    for (const menu of nodes) {
+      if (menu.status !== 1) {
+        continue;
+      }
+
+      if (menu.type === 'MENU' && menu.path) {
+        return normalizePath(menu.path);
+      }
+
+      const childPath = walk(menu.children ?? []);
+
+      if (childPath) {
+        return childPath;
+      }
+    }
+
+    return null;
+  };
+
+  return walk(menus) ?? '/403';
 }
