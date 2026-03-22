@@ -15,9 +15,6 @@ export const API_BASE_URLS = {
 // API_ENDPOINTS 按业务域组织路径，目的是让调用方在 import 后就能看出接口归属。
 // 如果后续系统管理模块接真接口，也优先从这里继续补充 user / role / menu 域。
 export const API_ENDPOINTS = {
-  auth: {
-    currentUser: '/sys/auth/current-user',
-  },
   dashboard: {
     overview: '/dashboard/overview',
   },

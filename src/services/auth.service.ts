@@ -3,9 +3,11 @@ import { mockLogin } from '@/mock/auth';
 import { mockMenuTree } from '@/mock/system';
 import { API_BASE_URLS, API_ENDPOINTS } from '@/services/api-endpoints';
 import {
+  introspectToken,
   requestPasswordToken,
   requestRefreshToken,
   revokeToken,
+  type OAuthIntrospectionResponse,
   type OAuthTokenResponse,
 } from '@/services/oauth.service';
 import type { MenuRecord } from '@/services/menu.service';
@@ -58,19 +60,6 @@ interface ApiResponse<T> {
   data: T;
 }
 
-// 当前登录用户上下文来自业务接口，而不是 OAuth introspect。
-// 这样做是为了适配后端 claim 精简后，前端仍然能稳定拿到姓名、角色和按钮权限。
-interface CurrentUserContext {
-  userId: number;
-  username: string;
-  realName?: string;
-  avatar?: string;
-  status: number;
-  statusMsg?: string;
-  roleCodes?: string[];
-  permissions?: string[];
-}
-
 function toAuthSession(tokenPayload: OAuthTokenResponse): AuthSession {
   return {
     accessToken: tokenPayload.access_token,
@@ -83,17 +72,19 @@ function toAuthSession(tokenPayload: OAuthTokenResponse): AuthSession {
 }
 
 function buildPermissionPayload(
-  currentUser: CurrentUserContext,
+  claims: OAuthIntrospectionResponse,
   menus: MenuRecord[],
 ): PermissionPayload {
   return {
-    userId: String(currentUser.userId ?? ''),
-    name: currentUser.realName ?? currentUser.username ?? '未命名用户',
-    roles: currentUser.roleCodes ?? [],
+    // 当前后端已经约定通过 introspect 返回完整用户 claim，
+    // 所以登录态恢复和首登都统一从这里提取用户身份字段。
+    userId: claims.user_id ?? claims.sub ?? '',
+    name: claims.real_name ?? claims.sub ?? '未命名用户',
+    roles: claims.roles ?? [],
     // 路由、菜单和图标完全以后端菜单树为准，前端不再保留一份同构静态菜单配置。
     menus,
     // 按钮权限暂时继续保留原始权限码，后续如果恢复按钮级校验，可以直接基于这份数据消费。
-    buttons: currentUser.permissions ?? [],
+    buttons: claims.permissions ?? [],
   };
 }
 
@@ -141,30 +132,9 @@ async function fetchCurrentMenus(session: AuthSession) {
   return result.data;
 }
 
-async function fetchCurrentUserContext(session: AuthSession) {
-  // 登录后的“用户是谁、有哪些角色和按钮权限”以后统一走 current-user，
-  // 这样后端即使继续调整 OAuth claim，前端菜单和权限也不会再次丢失。
-  const response = await axios.get<ApiResponse<CurrentUserContext>>(
-    `${API_BASE_URLS.business}${API_ENDPOINTS.auth.currentUser}`,
-    {
-      headers: {
-        Authorization: `${session.tokenType} ${session.accessToken}`,
-      },
-      timeout: 10000,
-    },
-  );
-  const result = response.data;
-  const resultMessage = result.message ?? result.msg ?? '当前登录用户信息加载失败';
-
-  if (result.code !== 0) {
-    throw new Error(resultMessage);
-  }
-
-  return result.data;
-}
-
 // 这个方法同时给“登录成功后初始化权限”和“页面刷新后的权限自恢复”复用。
-// 这样当前用户、菜单树和按钮权限始终来自同一组后端接口，不会出现缓存越用越旧的问题。
+// 这样用户 claim、菜单树和按钮权限都从 OAuth introspect + 菜单树接口恢复，
+// 不再依赖已经下线的 current-user 业务接口。
 export async function fetchCurrentPermissionPayload(
   session: Pick<AuthSession, 'accessToken' | 'tokenType'> = {
     accessToken: getStoredToken(),
@@ -181,12 +151,16 @@ export async function fetchCurrentPermissionPayload(
     refreshToken: '',
     tokenType: session.tokenType,
   };
-  const [currentUser, currentMenus] = await Promise.all([
-    fetchCurrentUserContext(authSession),
+  const [claims, currentMenus] = await Promise.all([
+    introspectToken(authSession.accessToken),
     fetchCurrentMenus(authSession),
   ]);
 
-  return buildPermissionPayload(currentUser, currentMenus);
+  if (!claims.active) {
+    throw new Error('登录状态校验失败');
+  }
+
+  return buildPermissionPayload(claims, currentMenus);
 }
 
 export async function refreshCurrentSession(refreshToken = getStoredRefreshToken()) {
@@ -211,6 +185,7 @@ export async function login(payload: LoginRequest) {
       },
       permissionPayload: buildPermissionPayload(
         {
+          active: true,
           permissions: [
             'sys:user:add',
             'sys:user:edit',
@@ -221,11 +196,10 @@ export async function login(payload: LoginRequest) {
             'sys:role:delete',
             'sys:menu:edit',
           ],
-          realName: '运营经理',
-          roleCodes: ['operator_admin'],
-          status: 1,
-          userId: 1001,
-          username: 'mock-admin',
+          real_name: '运营经理',
+          roles: ['operator_admin'],
+          sub: 'mock-admin',
+          user_id: '1001',
         },
         mockMenuTree,
       ),
@@ -239,8 +213,8 @@ export async function login(payload: LoginRequest) {
 
   return {
     session: activeSession,
-    // 当前后端的 introspect 结果并不稳定，登录后完整的姓名、角色和权限
-    // 统一以业务接口 /sys/auth/current-user 为准，避免再次出现“登录成功但菜单为空”的问题。
+    // 登录后权限上下文只使用 OAuth introspect，
+    // 这样可以和当前后端“移除 current-user、统一走 OAuth claim”的实现保持一致。
     permissionPayload: await fetchCurrentPermissionPayload(activeSession),
   } satisfies LoginResult;
 }
