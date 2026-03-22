@@ -66,6 +66,17 @@ export const VISIBLE_STATUS_OPTIONS: Array<{ label: string; value: 0 | 1 }> = [
 // 如果后续继续扩展菜单图标，优先在这里补齐稳定的 value，避免数据库里存的 icon 标识频繁变更。
 export const MENU_ICON_OPTIONS: Array<{ label: string; value: string }> = [
   { label: '工作台', value: 'dashboard' },
+  // 这组 workflow 语义图标优先给审批、流程设计、流程实例、待办/已办等菜单复用。
+  // 先把稳定 key 固定下来，后续即使替换具体视觉图标，也不需要回改数据库里已保存的 icon 值。
+  { label: '流程中心', value: 'workflow' },
+  { label: '流程设计', value: 'workflow-design' },
+  { label: '流程节点', value: 'workflow-node' },
+  { label: '流程实例', value: 'workflow-instance' },
+  { label: '发起流程', value: 'workflow-launch' },
+  { label: '待办任务', value: 'workflow-todo' },
+  { label: '已办任务', value: 'workflow-done' },
+  { label: '审批记录', value: 'workflow-audit' },
+  { label: '抄送消息', value: 'workflow-copy' },
   { label: '应用', value: 'appstore' },
   { label: '设置', value: 'setting' },
   { label: '审计', value: 'audit' },

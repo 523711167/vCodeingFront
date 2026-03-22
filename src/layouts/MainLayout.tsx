@@ -1,6 +1,8 @@
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import type { MenuProps } from 'antd';
 import {
+  CheckCircleOutlined,
+  ClockCircleOutlined,
   AlertOutlined,
   ApartmentOutlined,
   ApiOutlined,
@@ -19,6 +21,7 @@ import {
   DesktopOutlined,
   DeploymentUnitOutlined,
   FileOutlined,
+  FileSearchOutlined,
   FormOutlined,
   InboxOutlined,
   LockOutlined,
@@ -26,6 +29,7 @@ import {
   MailOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  NodeIndexOutlined,
   NotificationOutlined,
   PieChartOutlined,
   ProfileOutlined,
@@ -34,6 +38,7 @@ import {
   SafetyCertificateOutlined,
   ScheduleOutlined,
   SearchOutlined,
+  SendOutlined,
   SettingOutlined,
   ShopOutlined,
   SlidersOutlined,
@@ -70,6 +75,17 @@ const iconMap: Record<string, ReactNode> = {
   cluster: <ClusterOutlined />,
   control: <ControlOutlined />,
   dashboard: <DashboardOutlined />,
+  // 工作流类图标单独保留语义化 key，
+  // 是为了让菜单配置可以直接表达“流程设计/待办/实例”等业务含义，而不是只能复用通用图标名。
+  workflow: <DeploymentUnitOutlined />,
+  'workflow-audit': <AuditOutlined />,
+  'workflow-copy': <MailOutlined />,
+  'workflow-design': <ClusterOutlined />,
+  'workflow-done': <CheckCircleOutlined />,
+  'workflow-instance': <FileSearchOutlined />,
+  'workflow-launch': <SendOutlined />,
+  'workflow-node': <NodeIndexOutlined />,
+  'workflow-todo': <ClockCircleOutlined />,
   content: <ReadOutlined />,
   database: <DatabaseOutlined />,
   desktop: <DesktopOutlined />,
