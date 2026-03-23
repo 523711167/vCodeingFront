@@ -7,13 +7,13 @@ import {
   Drawer,
   Form,
   Input,
-  Modal,
   Select,
   Space,
   Table,
   Tag,
 } from 'antd';
 import PageContainer from '@/components/PageContainer';
+import PermissionButton from '@/components/PermissionButton';
 import { showErrorMessageOnce } from '@/services/error-message';
 import {
   deleteWorkflowDefinition,
@@ -30,7 +30,6 @@ import {
 interface SearchFormValues {
   name?: string;
   code?: string;
-  bizCode?: string;
   status?: WorkflowDefinitionStatusValue;
 }
 
@@ -201,11 +200,6 @@ function ProcessListPage() {
       title: '流程编码',
     },
     {
-      dataIndex: 'bizCode',
-      title: '业务编码',
-      render: (bizCode?: string) => bizCode || '-',
-    },
-    {
       dataIndex: 'version',
       title: '版本号',
       width: 100,
@@ -267,7 +261,6 @@ function ProcessListPage() {
             onFinish={(values) => {
               setQuery((previousQuery) => ({
                 ...previousQuery,
-                bizCode: values.bizCode?.trim() || undefined,
                 code: values.code?.trim() || undefined,
                 name: values.name?.trim() || undefined,
                 pageNum: 1,
@@ -280,9 +273,6 @@ function ProcessListPage() {
             </Form.Item>
             <Form.Item label="流程编码" name="code">
               <Input allowClear placeholder="请输入流程编码" />
-            </Form.Item>
-            <Form.Item label="业务编码" name="bizCode">
-              <Input allowClear placeholder="请输入业务编码" />
             </Form.Item>
             <Form.Item label="状态" name="status">
               <Select
@@ -313,6 +303,22 @@ function ProcessListPage() {
               </Space>
             </Form.Item>
           </Form>
+          {/* 流程列表沿用系统管理页的“查询区 + 主按钮”同一行布局，
+              是为了保证新增入口始终固定在工具栏右侧，减少页面切换后的使用成本。 */}
+          <Space>
+            <PermissionButton
+              onClick={() => {
+                // 创建流程改成新开浏览器 tab 进入流程定义页，
+                // 是为了和“列表浏览”和“流程建模”两种任务并行处理的使用习惯保持一致。
+                // 后续如果接多页签布局，也可以继续把这里替换成应用内 tab 打开逻辑。
+                window.open('/workflow/definition', '_blank', 'noopener,noreferrer');
+              }}
+              permissionCode="workflow:definition:create"
+              type="primary"
+            >
+              新增流程
+            </PermissionButton>
+          </Space>
         </div>
 
         <Table
@@ -364,9 +370,6 @@ function ProcessListPage() {
             <Descriptions.Item label="流程编码">
               {detailRecord.code}
             </Descriptions.Item>
-            <Descriptions.Item label="业务编码">
-              {detailRecord.bizCode || '-'}
-            </Descriptions.Item>
             <Descriptions.Item label="版本号">
               {detailRecord.version}
             </Descriptions.Item>
@@ -393,6 +396,7 @@ function ProcessListPage() {
           </Descriptions>
         )}
       </Drawer>
+
     </PageContainer>
   );
 }

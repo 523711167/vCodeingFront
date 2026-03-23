@@ -21,7 +21,6 @@ export interface WorkflowDefinitionRecord {
   description?: string;
   status: WorkflowDefinitionStatusValue;
   statusMsg: string;
-  bizCode?: string;
   createdBy?: number;
   createdAt?: string;
   updatedAt?: string;
@@ -34,7 +33,6 @@ export interface WorkflowDefinitionPageQuery {
   pageSize: number;
   name?: string;
   code?: string;
-  bizCode?: string;
   status?: WorkflowDefinitionStatusValue;
 }
 
@@ -49,12 +47,52 @@ export interface WorkflowDefinitionPageResult {
 export interface WorkflowDefinitionListQuery {
   name?: string;
   code?: string;
-  bizCode?: string;
   status?: WorkflowDefinitionStatusValue;
 }
 
 export interface WorkflowDefinitionIdPayload {
   id: number;
+}
+
+export interface CreateWorkflowDefinitionNodePayload {
+  code: string;
+  name: string;
+  nodeType: 'START' | 'APPROVAL' | 'CONDITION' | 'PARALLEL_SPLIT' | 'PARALLEL_JOIN' | 'END';
+  approveMode?: 'AND' | 'OR' | 'SEQUENTIAL';
+  timeoutHours?: number;
+  timeoutAction?: 'AUTO_APPROVE' | 'AUTO_REJECT' | 'NOTIFY_ONLY';
+  remindHours?: number;
+  positionX?: number;
+  positionY?: number;
+  configJson?: string;
+  approverList?: Array<{
+    approverType: 'USER' | 'ROLE' | 'DEPT' | 'INITIATOR_DEPT_LEADER';
+    approverValue: string;
+    sortOrder?: number;
+  }>;
+}
+
+export interface CreateWorkflowTransitionPayload {
+  fromNodeCode: string;
+  toNodeCode: string;
+  label?: string;
+  priority?: number;
+}
+
+export interface CreateWorkflowDefinitionPayload {
+  name: string;
+  code: string;
+  description?: string;
+  nodes: CreateWorkflowDefinitionNodePayload[];
+  transitions: CreateWorkflowTransitionPayload[];
+}
+
+export interface UpdateWorkflowDefinitionPayload {
+  id: number;
+  name: string;
+  description?: string;
+  nodes: CreateWorkflowDefinitionNodePayload[];
+  transitions: CreateWorkflowTransitionPayload[];
 }
 
 export async function fetchWorkflowDefinitionPage(query: WorkflowDefinitionPageQuery) {
@@ -80,6 +118,22 @@ export async function fetchWorkflowDefinitionDetail(id: number) {
     method: 'get',
     params: { id },
     url: API_ENDPOINTS.workflowDefinition.detail,
+  });
+}
+
+export async function createWorkflowDefinition(payload: CreateWorkflowDefinitionPayload) {
+  return request<WorkflowDefinitionRecord>({
+    data: payload,
+    method: 'post',
+    url: API_ENDPOINTS.workflowDefinition.create,
+  });
+}
+
+export async function updateWorkflowDefinition(payload: UpdateWorkflowDefinitionPayload) {
+  return request<WorkflowDefinitionRecord>({
+    data: payload,
+    method: 'post',
+    url: API_ENDPOINTS.workflowDefinition.update,
   });
 }
 

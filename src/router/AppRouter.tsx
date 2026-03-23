@@ -4,6 +4,7 @@ import { Navigate, useRoutes } from 'react-router-dom';
 import { flattenRoutes } from '@/features/permission/filterRoutes';
 import { getDefaultRoutePath } from '@/services/auth.service';
 import MainLayout from '@/layouts/MainLayout';
+import ProcessDefinitionPage from '@/pages/workflow/ProcessDefinitionPage';
 import { buildBackendRoutes } from '@/router/backend-routes';
 import { publicRoutes } from '@/router/routes';
 import { AuthGuard } from '@/router/guards';
@@ -57,6 +58,19 @@ function AppRouter() {
       {
         path: '/403',
         element: publicRoutes.forbidden,
+      },
+      {
+        path: '/workflow/definition',
+        element: (
+          // 流程定义页从主布局中剥离出来，改成独立窗口承接。
+          // 这样用户从流程列表点“新增流程”新开 tab 后，页面里只保留流程设计相关内容，
+          // 不再叠加左侧菜单、顶栏和面包屑。
+          <AuthGuard>
+            <div className="standalone-workflow-page">
+              <ProcessDefinitionPage />
+            </div>
+          </AuthGuard>
+        ),
       },
       {
         path: '/',

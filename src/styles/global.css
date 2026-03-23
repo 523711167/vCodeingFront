@@ -83,6 +83,13 @@ body {
   height: 100%;
 }
 
+/* 流程定义独立页不再走后台主布局，因此需要单独补一层全屏容器和内边距。
+   这样新开 tab 后仍然有稳定留白和最小高度，不会因为缺少 app-content 而贴边。 */
+.standalone-workflow-page {
+  min-height: 100vh;
+  padding: 24px;
+}
+
 /* 页面头部区域统一处理标题、说明和右侧操作按钮的布局。 */
 .page-container__header {
   display: flex;
@@ -182,5 +189,9 @@ body {
 
   .management-toolbar {
     flex-direction: column;
+  }
+
+  .standalone-workflow-page {
+    padding: 16px;
   }
 }

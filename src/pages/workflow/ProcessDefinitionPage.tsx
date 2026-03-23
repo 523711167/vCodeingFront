@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import {
   App as AntdApp,
+  Alert,
   Button,
   Card,
   Col,
@@ -16,7 +17,18 @@ import {
 } from 'antd';
 import LogicFlow from '@logicflow/core';
 import '@logicflow/core/dist/index.css';
+import { useSearchParams } from 'react-router-dom';
 import PageContainer from '@/components/PageContainer';
+import { showErrorMessageOnce } from '@/services/error-message';
+import {
+  createWorkflowDefinition,
+  fetchWorkflowDefinitionDetail,
+  updateWorkflowDefinition,
+  type CreateWorkflowDefinitionNodePayload,
+  type CreateWorkflowDefinitionPayload,
+  type CreateWorkflowTransitionPayload,
+  type WorkflowDefinitionRecord,
+} from '@/services/workflow.service';
 
 const nodeRoleOptions = [
   { label: '开始/结束', value: 'START_END' },
@@ -341,6 +353,217 @@ interface HistoryActionState {
   canUndo: boolean;
 }
 
+interface DefinitionFormValues {
+  code: string;
+  name: string;
+}
+
+interface WorkflowCanvasNode {
+  id: string;
+  type: string;
+  text?: string;
+  x: number;
+  y: number;
+  properties?: Record<string, unknown>;
+}
+
+interface WorkflowCanvasEdge {
+  id?: string;
+  sourceNodeId: string;
+  targetNodeId: string;
+  text?: string;
+  type?: string;
+  properties?: Record<string, unknown>;
+  pointsList?: Array<{ x: number; y: number }>;
+}
+
+interface WorkflowCanvasData {
+  nodes: WorkflowCanvasNode[];
+  edges: WorkflowCanvasEdge[];
+}
+
+const backendNodeTypeToCanvasConfig = {
+  APPROVAL: { nodeRole: 'APPROVAL', type: 'rect' },
+  CONDITION: { nodeRole: 'CONDITION', type: 'diamond' },
+  END: { nodeRole: 'START_END', type: 'circle' },
+  PARALLEL_JOIN: { nodeRole: 'PARALLEL_JOIN', type: 'diamond' },
+  PARALLEL_SPLIT: { nodeRole: 'PARALLEL_SPLIT', type: 'diamond' },
+  START: { nodeRole: 'START_END', type: 'circle' },
+} as const;
+
+function minutesToHours(value?: number) {
+  if (typeof value !== 'number' || value <= 0) {
+    return undefined;
+  }
+
+  return Math.max(1, Math.ceil(value / 60));
+}
+
+function hoursToMinutes(value?: number) {
+  if (typeof value !== 'number' || value <= 0) {
+    return undefined;
+  }
+
+  return value * 60;
+}
+
+function toBackendApproveMode(value?: string) {
+  switch (value) {
+    case 'COUNTERSIGN':
+      return 'AND';
+    case 'SEQUENTIAL_SIGN':
+      return 'SEQUENTIAL';
+    case 'OR_SIGN':
+      return 'OR';
+    default:
+      return undefined;
+  }
+}
+
+function toCanvasApproveMode(value?: string) {
+  switch (value) {
+    case 'AND':
+      return 'COUNTERSIGN';
+    case 'SEQUENTIAL':
+      return 'SEQUENTIAL_SIGN';
+    case 'OR':
+      return 'OR_SIGN';
+    default:
+      return undefined;
+  }
+}
+
+function toBackendTimeoutAction(value?: string) {
+  switch (value) {
+    case 'AUTO_PASS':
+      return 'AUTO_APPROVE';
+    case 'AUTO_REJECT':
+      return 'AUTO_REJECT';
+    case 'REMIND_ONLY':
+      return 'NOTIFY_ONLY';
+    case 'TRANSFER_ADMIN':
+      return 'NOTIFY_ONLY';
+    default:
+      return undefined;
+  }
+}
+
+function toCanvasTimeoutStrategy(value?: string) {
+  switch (value) {
+    case 'AUTO_APPROVE':
+      return 'AUTO_PASS';
+    case 'AUTO_REJECT':
+      return 'AUTO_REJECT';
+    case 'NOTIFY_ONLY':
+      return 'REMIND_ONLY';
+    default:
+      return undefined;
+  }
+}
+
+function toBackendApproverType(
+  value?: string,
+): 'USER' | 'ROLE' | 'INITIATOR_DEPT_LEADER' | undefined {
+  switch (value) {
+    case 'USER':
+      return 'USER';
+    case 'ROLE':
+      return 'ROLE';
+    case 'DEPT_LEADER':
+      return 'INITIATOR_DEPT_LEADER';
+    default:
+      return undefined;
+  }
+}
+
+function toCanvasApproverType(value?: string) {
+  switch (value) {
+    case 'USER':
+      return 'USER';
+    case 'ROLE':
+      return 'ROLE';
+    case 'INITIATOR_DEPT_LEADER':
+      return 'DEPT_LEADER';
+    default:
+      return undefined;
+  }
+}
+
+function sanitizeNodeCode(value: string, fallbackIndex: number) {
+  const normalizedValue = value
+    .trim()
+    .replace(/[^a-zA-Z0-9_]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .toUpperCase();
+
+  return (normalizedValue || `NODE_${fallbackIndex}`).slice(0, 64);
+}
+
+function isFormValidationError(error: unknown) {
+  return Boolean(
+    error &&
+      typeof error === 'object' &&
+      'errorFields' in (error as Record<string, unknown>),
+  );
+}
+
+function buildCanvasDataFromDefinition(detail: WorkflowDefinitionRecord): WorkflowCanvasData {
+  const nodes = (detail.nodeList ?? []).map((node, index) => {
+    const canvasConfig =
+      backendNodeTypeToCanvasConfig[
+        (node.nodeType as keyof typeof backendNodeTypeToCanvasConfig) ?? 'APPROVAL'
+      ] ?? backendNodeTypeToCanvasConfig.APPROVAL;
+
+    return {
+      id: String(node.code || `NODE_${index + 1}`),
+      properties: {
+        approverIds: Array.isArray(node.approverList)
+          ? node.approverList.map((item) => item?.approverValue).filter(Boolean)
+          : [],
+        approverType: Array.isArray(node.approverList)
+          ? toCanvasApproverType(node.approverList[0]?.approverType)
+          : undefined,
+        approveMode: toCanvasApproveMode(node.approveMode as string | undefined),
+        nodeRole: canvasConfig.nodeRole,
+        remindAfterMinutes: hoursToMinutes(node.remindHours as number | undefined),
+        timeoutAfterMinutes: hoursToMinutes(node.timeoutHours as number | undefined),
+        timeoutStrategy: toCanvasTimeoutStrategy(node.timeoutAction as string | undefined),
+      },
+      text: typeof node.name === 'string' ? node.name : `节点${index + 1}`,
+      type: canvasConfig.type,
+      x: Number(node.positionX ?? 200 + index * 120),
+      y: Number(node.positionY ?? 220),
+    } satisfies WorkflowCanvasNode;
+  });
+
+  const edges = (detail.transitionList ?? []).map((transition, index) => {
+    const conditionExpr =
+      typeof transition.conditionExpr === 'string' ? transition.conditionExpr : '';
+    const label = typeof transition.label === 'string' ? transition.label : '';
+    const priority =
+      typeof transition.priority === 'number' ? transition.priority : undefined;
+
+    return {
+      id: String(transition.id || `EDGE_${index + 1}`),
+      properties: {
+        conditionType: conditionExpr ? 'EXPRESSION' : 'ALWAYS',
+        expression: conditionExpr,
+        isDefault: false,
+        priority,
+      },
+      sourceNodeId: String(transition.fromNodeCode),
+      targetNodeId: String(transition.toNodeCode),
+      text: label,
+      type: 'polyline',
+    } satisfies WorkflowCanvasEdge;
+  });
+
+  return {
+    edges,
+    nodes,
+  };
+}
+
 function getTextValue(text: unknown) {
   if (typeof text === 'string') {
     return text;
@@ -366,12 +589,21 @@ function stringifyApproverIds(value: unknown) {
 
 function ProcessDefinitionPage() {
   const { message } = AntdApp.useApp();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [definitionForm] = Form.useForm<DefinitionFormValues>();
   const [nodeForm] = Form.useForm<NodeFormValues>();
   const [edgeForm] = Form.useForm<EdgeFormValues>();
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const logicFlowRef = useRef<LogicFlow | null>(null);
   const nodeSequenceRef = useRef(initialGraphData.nodes.length + 1);
+  const [currentDefinitionId, setCurrentDefinitionId] = useState<number | null>(() => {
+    const rawDefinitionId = Number(searchParams.get('id') ?? '');
+
+    return Number.isFinite(rawDefinitionId) && rawDefinitionId > 0 ? rawDefinitionId : null;
+  });
+  const [definitionSaving, setDefinitionSaving] = useState(false);
+  const [definitionLoading, setDefinitionLoading] = useState(false);
   const [graphDataCollapsed, setGraphDataCollapsed] = useState(true);
   const [contextMenuState, setContextMenuState] = useState<ContextMenuState | null>(null);
   const [historyActionState, setHistoryActionState] = useState<HistoryActionState>({
@@ -392,6 +624,21 @@ function ProcessDefinitionPage() {
     const currentGraphData = logicFlowRef.current?.getGraphData();
 
     setGraphSnapshot(JSON.stringify(currentGraphData ?? initialGraphData, null, 2));
+  }
+
+  function renderWorkflowGraph(nextGraphData: WorkflowCanvasData) {
+    const logicFlow = logicFlowRef.current;
+
+    if (!logicFlow) {
+      return;
+    }
+
+    logicFlow.render(nextGraphData);
+    setSelectedElement(null);
+    setContextMenuState(null);
+    syncGraphSnapshot();
+    syncHistoryActionState();
+    logicFlow.fitView(40, 40);
   }
 
   function syncHistoryActionState() {
@@ -472,6 +719,192 @@ function ProcessDefinitionPage() {
           ? edgeData.properties.priority
           : undefined,
     });
+  }
+
+  function buildWorkflowSavePayload() {
+    const currentGraphData = (logicFlowRef.current?.getGraphData() ?? initialGraphData) as WorkflowCanvasData;
+    const nodes = currentGraphData.nodes ?? [];
+    const edges = currentGraphData.edges ?? [];
+    const incomingCountMap = new Map<string, number>();
+    const outgoingCountMap = new Map<string, number>();
+
+    edges.forEach((edge) => {
+      incomingCountMap.set(
+        edge.targetNodeId,
+        (incomingCountMap.get(edge.targetNodeId) ?? 0) + 1,
+      );
+      outgoingCountMap.set(
+        edge.sourceNodeId,
+        (outgoingCountMap.get(edge.sourceNodeId) ?? 0) + 1,
+      );
+    });
+
+    const usedNodeCodes = new Set<string>();
+    const nodeCodeMap = new Map<string, string>();
+
+    const ensureUniqueNodeCode = (rawCode: string) => {
+      let nextCode = rawCode;
+      let index = 1;
+
+      while (usedNodeCodes.has(nextCode)) {
+        nextCode = `${rawCode}_${index}`;
+        index += 1;
+      }
+
+      usedNodeCodes.add(nextCode);
+      return nextCode.slice(0, 64);
+    };
+
+    const workflowNodes = nodes.map<CreateWorkflowDefinitionNodePayload>((node, index) => {
+      const nodeRole =
+        typeof node.properties?.nodeRole === 'string' ? node.properties.nodeRole : undefined;
+      const incomingCount = incomingCountMap.get(node.id) ?? 0;
+      const outgoingCount = outgoingCountMap.get(node.id) ?? 0;
+      let nodeType: CreateWorkflowDefinitionNodePayload['nodeType'];
+
+      switch (nodeRole) {
+        case 'APPROVAL':
+          nodeType = 'APPROVAL';
+          break;
+        case 'CONDITION':
+          nodeType = 'CONDITION';
+          break;
+        case 'PARALLEL_SPLIT':
+          nodeType = 'PARALLEL_SPLIT';
+          break;
+        case 'PARALLEL_JOIN':
+          nodeType = 'PARALLEL_JOIN';
+          break;
+        case 'START_END':
+          nodeType = incomingCount === 0 ? 'START' : 'END';
+          break;
+        default:
+          nodeType = incomingCount === 0 ? 'START' : outgoingCount === 0 ? 'END' : 'APPROVAL';
+          break;
+      }
+
+      const rawNodeCode =
+        nodeType === 'START'
+          ? 'START'
+          : nodeType === 'END'
+            ? 'END'
+            : sanitizeNodeCode(node.id, index + 1);
+      const nodeCode = ensureUniqueNodeCode(rawNodeCode);
+
+      nodeCodeMap.set(node.id, nodeCode);
+
+      const approverType =
+        typeof node.properties?.approverType === 'string'
+          ? node.properties.approverType
+          : undefined;
+      const approverIds = Array.isArray(node.properties?.approverIds)
+        ? node.properties.approverIds
+            .map((item) => String(item).trim())
+            .filter(Boolean)
+        : [];
+      const approverList =
+        approverType && approverIds.length && toBackendApproverType(approverType)
+          ? approverIds.map((approverId, approverIndex) => ({
+              approverType: toBackendApproverType(approverType)!,
+              approverValue: approverId,
+              sortOrder: approverIndex + 1,
+            }))
+          : undefined;
+
+      return {
+        approverList,
+        approveMode: toBackendApproveMode(
+          typeof node.properties?.approveMode === 'string'
+            ? node.properties.approveMode
+            : undefined,
+        ),
+        code: nodeCode,
+        configJson: JSON.stringify({
+          edgeCount: incomingCount + outgoingCount,
+          originalNodeId: node.id,
+          originalNodeType: node.type,
+          uiProperties: node.properties ?? {},
+        }),
+        name: getTextValue(node.text) || `节点${index + 1}`,
+        nodeType,
+        positionX: Math.round(node.x),
+        positionY: Math.round(node.y),
+        remindHours: minutesToHours(
+          typeof node.properties?.remindAfterMinutes === 'number'
+            ? node.properties.remindAfterMinutes
+            : undefined,
+        ),
+        timeoutAction: toBackendTimeoutAction(
+          typeof node.properties?.timeoutStrategy === 'string'
+            ? node.properties.timeoutStrategy
+            : undefined,
+        ),
+        timeoutHours: minutesToHours(
+          typeof node.properties?.timeoutAfterMinutes === 'number'
+            ? node.properties.timeoutAfterMinutes
+            : undefined,
+        ),
+      };
+    });
+
+    const workflowTransitions = edges.map<CreateWorkflowTransitionPayload>((edge, index) => ({
+      conditionExpr:
+        typeof edge.properties?.expression === 'string' ? edge.properties.expression : undefined,
+      fromNodeCode: nodeCodeMap.get(edge.sourceNodeId) ?? sanitizeNodeCode(edge.sourceNodeId, index + 1),
+      label: getTextValue(edge.text) || undefined,
+      priority:
+        typeof edge.properties?.priority === 'number' ? edge.properties.priority : index + 1,
+      toNodeCode: nodeCodeMap.get(edge.targetNodeId) ?? sanitizeNodeCode(edge.targetNodeId, index + 1),
+    }));
+
+    return {
+      nodes: workflowNodes,
+      transitions: workflowTransitions,
+    };
+  }
+
+  async function handleSaveWorkflowDefinition() {
+    try {
+      const values = await definitionForm.validateFields();
+      const payload = buildWorkflowSavePayload();
+
+      if (!payload.nodes.length) {
+        message.warning('当前流程没有节点，无法保存');
+        return;
+      }
+
+      setDefinitionSaving(true);
+
+      if (currentDefinitionId) {
+        await updateWorkflowDefinition({
+          id: currentDefinitionId,
+          name: values.name.trim(),
+          nodes: payload.nodes,
+          transitions: payload.transitions,
+        });
+        message.success('流程保存成功');
+        return;
+      }
+
+      const createdDefinition = await createWorkflowDefinition({
+        code: values.code.trim(),
+        name: values.name.trim(),
+        nodes: payload.nodes,
+        transitions: payload.transitions,
+      } satisfies CreateWorkflowDefinitionPayload);
+
+      setCurrentDefinitionId(createdDefinition.id);
+      setSearchParams({ id: String(createdDefinition.id) }, { replace: true });
+      message.success('流程创建成功');
+    } catch (error) {
+      if (isFormValidationError(error)) {
+        return;
+      }
+
+      showErrorMessageOnce(error, '流程保存失败');
+    } finally {
+      setDefinitionSaving(false);
+    }
   }
 
   function getContextMenuPosition(event: MouseEvent) {
@@ -642,6 +1075,54 @@ function ProcessDefinitionPage() {
     syncSelectedElementPanel();
   }, [edgeForm, nodeForm, selectedElement]);
 
+  useEffect(() => {
+    const rawDefinitionId = Number(searchParams.get('id') ?? '');
+
+    if (!Number.isFinite(rawDefinitionId) || rawDefinitionId <= 0) {
+      setCurrentDefinitionId(null);
+      definitionForm.setFieldsValue({
+        code: '',
+        name: '',
+      });
+      renderWorkflowGraph(initialGraphData as WorkflowCanvasData);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function run() {
+      try {
+        setDefinitionLoading(true);
+        const detail = await fetchWorkflowDefinitionDetail(rawDefinitionId);
+
+        if (cancelled) {
+          return;
+        }
+
+        setCurrentDefinitionId(detail.id);
+        definitionForm.setFieldsValue({
+          code: detail.code,
+          name: detail.name,
+        });
+        renderWorkflowGraph(buildCanvasDataFromDefinition(detail));
+      } catch (error) {
+        if (!cancelled) {
+          showErrorMessageOnce(error, '流程定义加载失败');
+        }
+      } finally {
+        if (!cancelled) {
+          setDefinitionLoading(false);
+        }
+      }
+    }
+
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [definitionForm, searchParams]);
+
   function resetDemoGraph() {
     const logicFlow = logicFlowRef.current;
 
@@ -793,9 +1274,61 @@ function ProcessDefinitionPage() {
 
   return (
     <PageContainer
-      description="流程定义页当前接入了 LogicFlow Demo，支持拖拽节点、右键删除、节点属性配置和连线条件配置。"
+      description="流程定义页支持拖拽建模、节点与连线属性配置，并可将整个流程定义保存到后端。"
+      extra={(
+        <Button
+          loading={definitionSaving}
+          onClick={() => void handleSaveWorkflowDefinition()}
+          type="primary"
+        >
+          保存流程
+        </Button>
+      )}
       title="流程定义"
     >
+      <Form<DefinitionFormValues>
+        form={definitionForm}
+        initialValues={{
+          code: '',
+          name: '',
+        }}
+        layout="vertical"
+      >
+        <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+          <Col lg={8} span={24}>
+            <Form.Item
+              label="流程名称"
+              name="name"
+              rules={[{ required: true, message: '请输入流程名称' }]}
+            >
+              <Input placeholder="请输入流程名称" />
+            </Form.Item>
+          </Col>
+          <Col lg={8} span={24}>
+            <Form.Item
+              extra={currentDefinitionId ? '流程编码在创建后保持不变。' : undefined}
+              label="流程编码"
+              name="code"
+              rules={[{ required: true, message: '请输入流程编码' }]}
+            >
+              <Input
+                disabled={Boolean(currentDefinitionId)}
+                placeholder="请输入流程编码"
+              />
+            </Form.Item>
+          </Col>
+        </Row>
+      </Form>
+
+      {definitionLoading && (
+        <Alert
+          showIcon
+          message="正在加载流程定义，请稍候"
+          style={{ marginBottom: 16 }}
+          type="info"
+        />
+      )}
+
       <Row gutter={[16, 16]}>
         <Col lg={4} span={24}>
           <Card title="快捷操作">
