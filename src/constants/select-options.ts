@@ -77,6 +77,19 @@ export const MENU_ICON_OPTIONS: Array<{ label: string; value: string }> = [
   { label: '已办任务', value: 'workflow-done' },
   { label: '审批记录', value: 'workflow-audit' },
   { label: '抄送消息', value: 'workflow-copy' },
+  // 业务建模类图标单独固定一组 key，
+  // 是为了让“业务建模 / 业务定义 / 业务对象 / 规则模型”等菜单在数据库里保存稳定标识，
+  // 后续即使替换具体视觉图标，也不需要批量回写后端数据。
+  { label: '业务建模', value: 'business-model' },
+  { label: '业务定义', value: 'business-definition' },
+  { label: '业务对象', value: 'business-object' },
+  { label: '业务规则', value: 'business-rule' },
+  { label: '业务表单', value: 'business-form' },
+  { label: '业务场景', value: 'business-scene' },
+  { label: '业务服务', value: 'business-service' },
+  { label: '业务目录', value: 'business-catalog' },
+  { label: '业务流程', value: 'business-process' },
+  { label: '业务功能', value: 'business-function' },
   { label: '应用', value: 'appstore' },
   { label: '设置', value: 'setting' },
   { label: '审计', value: 'audit' },
