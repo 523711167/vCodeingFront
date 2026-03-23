@@ -57,6 +57,10 @@ export interface UpdateBizDefinitionPayload {
   bizName: string;
   bizDesc?: string;
   workflowDefinitionId?: number;
+  // 后端已将角色绑定并入业务定义编辑接口。
+  // OpenAPI 文档当前还没完全体现这个字段，这里先按联调结果补齐 roleIds，
+  // 避免前端继续依赖旧的“单独绑定角色”接口。
+  roleIds?: number[];
   status: BizDefinitionStatusValue;
 }
 
@@ -127,8 +131,6 @@ export async function deleteBizDefinition(payload: DeleteBizDefinitionPayload) {
 export async function fetchBizDefinitionRoles(bizDefinitionId: number) {
   return request<BizDefinitionRoleRecord>({
     method: 'get',
-    // 业务绑定角色接口已改为显式使用 bizDefinitionId 查询参数，
-    // 这里同步后端命名，避免继续复用通用 id 导致请求命中不到最新接口实现。
     params: { bizDefinitionId },
     url: API_ENDPOINTS.biz.roles,
   });

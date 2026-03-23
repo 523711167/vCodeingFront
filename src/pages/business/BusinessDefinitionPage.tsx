@@ -7,7 +7,6 @@ import {
   Drawer,
   Form,
   Input,
-  Modal,
   Select,
   Space,
   Spin,
@@ -23,14 +22,11 @@ import {
   fetchBizDefinitionPage,
   fetchBizDefinitionRoles,
   updateBizDefinition,
-  updateBizDefinitionRoles,
   type BizDefinitionPageQuery,
   type BizDefinitionPageResult,
   type BizDefinitionRecord,
-  type BizDefinitionRoleRecord,
   type BizDefinitionStatusValue,
   type CreateBizDefinitionPayload,
-  type UpdateBizDefinitionRolesPayload,
   type UpdateBizDefinitionPayload,
 } from '@/services/biz.service';
 import { showErrorMessageOnce } from '@/services/error-message';
@@ -51,12 +47,9 @@ interface BizDefinitionFormValues {
   bizCode?: string;
   bizName: string;
   bizDesc?: string;
+  roleIds?: number[];
   workflowDefinitionId?: number;
   status: BizDefinitionStatusValue;
-}
-
-interface BizDefinitionRoleBindingFormValues {
-  roleIds?: number[];
 }
 
 type EditorMode = 'create' | 'edit';
@@ -87,7 +80,6 @@ function BusinessDefinitionPage() {
   const { message, modal } = AntdApp.useApp();
   const [searchForm] = Form.useForm<SearchFormValues>();
   const [editorForm] = Form.useForm<BizDefinitionFormValues>();
-  const [roleBindingForm] = Form.useForm<BizDefinitionRoleBindingFormValues>();
   const [query, setQuery] = useState<BizDefinitionPageQuery>(initialPageQuery);
   const [reloadVersion, setReloadVersion] = useState(0);
   const [pageData, setPageData] = useState<BizDefinitionPageResult>(initialPageData);
@@ -102,12 +94,8 @@ function BusinessDefinitionPage() {
   const [editorSubmitting, setEditorSubmitting] = useState(false);
   const [editorMode, setEditorMode] = useState<EditorMode>('create');
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [roleBindingOpen, setRoleBindingOpen] = useState(false);
-  const [roleBindingLoading, setRoleBindingLoading] = useState(false);
-  const [roleBindingSubmitting, setRoleBindingSubmitting] = useState(false);
-  const [roleBindingTargetRecord, setRoleBindingTargetRecord] =
-    useState<BizDefinitionRecord | null>(null);
   const [roleOptions, setRoleOptions] = useState<RoleRecord[]>([]);
+  const [roleOptionsLoading, setRoleOptionsLoading] = useState(false);
 
   useEffect(() => {
     let canceled = false;
@@ -169,6 +157,37 @@ function BusinessDefinitionPage() {
     };
   }, []);
 
+  useEffect(() => {
+    let canceled = false;
+
+    async function run() {
+      try {
+        setRoleOptionsLoading(true);
+        // 角色选项预先加载，是为了让业务定义编辑抽屉打开时可以直接展示角色多选，
+        // 避免用户每次点编辑都再等一次角色列表请求。
+        const records = await fetchRoleList();
+
+        if (!canceled) {
+          setRoleOptions(records);
+        }
+      } catch (error) {
+        if (!canceled) {
+          showErrorMessageOnce(error, '角色选项加载失败');
+        }
+      } finally {
+        if (!canceled) {
+          setRoleOptionsLoading(false);
+        }
+      }
+    }
+
+    void run();
+
+    return () => {
+      canceled = true;
+    };
+  }, []);
+
   function triggerReload(pageNum = query.pageNum) {
     // 列表刷新统一收口到这一处，是为了让查询、分页和增删改后的刷新规则保持一致，
     // 后续如果要补缓存、请求防抖或列表选中态，也只需要改这一条链路。
@@ -205,6 +224,7 @@ function BusinessDefinitionPage() {
     // 新增时默认给“正常”状态，是为了降低表单必填数量；
     // 如果后续希望改成草稿态，优先从这里调整默认值。
     editorForm.setFieldsValue({
+      roleIds: [],
       status: 1,
     });
     setEditorOpen(true);
@@ -216,11 +236,17 @@ function BusinessDefinitionPage() {
       setEditingId(record.id);
       setEditorLoading(true);
       setEditorOpen(true);
-      const detail = await fetchBizDefinitionDetail(record.id);
+      // 详情和角色绑定结果一起加载，是为了让编辑抽屉在打开时就拿到完整表单数据，
+      // 避免用户先看到旧角色，再被第二个请求覆盖。
+      const [detail, bizRoleRecord] = await Promise.all([
+        fetchBizDefinitionDetail(record.id),
+        fetchBizDefinitionRoles(record.id),
+      ]);
       editorForm.setFieldsValue({
         bizCode: detail.bizCode,
         bizDesc: detail.bizDesc,
         bizName: detail.bizName,
+        roleIds: bizRoleRecord.roleIds,
         status: detail.status,
         workflowDefinitionId: detail.workflowDefinitionId,
       });
@@ -251,6 +277,7 @@ function BusinessDefinitionPage() {
           bizDesc: values.bizDesc?.trim() || undefined,
           bizName: values.bizName.trim(),
           id: editingId,
+          roleIds: values.roleIds ?? [],
           status: values.status,
           workflowDefinitionId: values.workflowDefinitionId,
         } satisfies UpdateBizDefinitionPayload);
@@ -263,55 +290,6 @@ function BusinessDefinitionPage() {
       showErrorMessageOnce(error, editorMode === 'create' ? '业务定义新增失败' : '业务定义修改失败');
     } finally {
       setEditorSubmitting(false);
-    }
-  }
-
-  async function openRoleBindingModal(record: BizDefinitionRecord) {
-    try {
-      setRoleBindingLoading(true);
-      setRoleBindingTargetRecord(record);
-      roleBindingForm.resetFields();
-
-      // 绑定角色时同时拉取“当前已绑定角色”和“全量可选角色”，
-      // 这样弹框打开时看到的是同一时刻的角色快照，避免刚新增角色后需要手动刷新整个页面。
-      const [bizRoleRecord, roleList] = await Promise.all([
-        fetchBizDefinitionRoles(record.id),
-        fetchRoleList(),
-      ]);
-
-      setRoleOptions(roleList);
-      roleBindingForm.setFieldsValue({
-        roleIds: bizRoleRecord.roleIds,
-      });
-      setRoleBindingOpen(true);
-    } catch (error) {
-      showErrorMessageOnce(error, '业务角色关联数据加载失败');
-    } finally {
-      setRoleBindingLoading(false);
-    }
-  }
-
-  async function handleSubmitRoleBinding(
-    values: BizDefinitionRoleBindingFormValues,
-  ) {
-    if (!roleBindingTargetRecord) {
-      return;
-    }
-
-    try {
-      setRoleBindingSubmitting(true);
-      await updateBizDefinitionRoles({
-        bizDefinitionId: roleBindingTargetRecord.id,
-        roleIds: values.roleIds ?? [],
-      } satisfies UpdateBizDefinitionRolesPayload);
-      message.success('业务定义角色关联成功');
-      setRoleBindingOpen(false);
-      setRoleBindingTargetRecord(null);
-      roleBindingForm.resetFields();
-    } catch (error) {
-      showErrorMessageOnce(error, '业务定义角色关联失败');
-    } finally {
-      setRoleBindingSubmitting(false);
     }
   }
 
@@ -399,7 +377,7 @@ function BusinessDefinitionPage() {
     {
       key: 'action',
       title: '操作',
-      width: 300,
+      width: 220,
       render: (_, record) => (
         <Space size={4} wrap>
           <Button onClick={() => void openDetail(record)} size="small" type="link">
@@ -407,13 +385,6 @@ function BusinessDefinitionPage() {
           </Button>
           <Button onClick={() => void openEditEditor(record)} size="small" type="link">
             编辑
-          </Button>
-          <Button
-            onClick={() => void openRoleBindingModal(record)}
-            size="small"
-            type="link"
-          >
-            绑定角色
           </Button>
           <Button danger onClick={() => handleDelete(record)} size="small" type="link">
             删除
@@ -623,6 +594,29 @@ function BusinessDefinitionPage() {
                 showSearch
               />
             </Form.Item>
+            {editorMode === 'edit' && (
+              <Form.Item
+                extra="角色绑定已并入编辑接口；如果需要清空全部角色，直接取消所有已选项后保存即可。"
+                label="绑定角色"
+                name="roleIds"
+              >
+                <Select
+                  allowClear
+                  loading={roleOptionsLoading}
+                  mode="multiple"
+                  optionFilterProp="label"
+                  options={roleOptions.map((role) => ({
+                    label:
+                      role.status === 1
+                        ? `${role.name}（${role.code}）`
+                        : `${role.name}（${role.code}，停用）`,
+                    value: role.id,
+                  }))}
+                  placeholder="请选择角色"
+                  showSearch
+                />
+              </Form.Item>
+            )}
             <Form.Item
               initialValue={1}
               label="状态"
@@ -661,53 +655,6 @@ function BusinessDefinitionPage() {
           </Form>
         </Spin>
       </Drawer>
-      <Modal
-        confirmLoading={roleBindingSubmitting}
-        destroyOnHidden
-        onCancel={() => {
-          setRoleBindingOpen(false);
-          setRoleBindingTargetRecord(null);
-          roleBindingForm.resetFields();
-        }}
-        okButtonProps={{
-          loading: roleBindingSubmitting,
-        }}
-        okText="保存关联"
-        onOk={() => void roleBindingForm.submit()}
-        open={roleBindingOpen}
-        title="绑定角色"
-      >
-        <Form<BizDefinitionRoleBindingFormValues>
-          form={roleBindingForm}
-          layout="vertical"
-          onFinish={handleSubmitRoleBinding}
-        >
-          <Form.Item label="业务定义">
-            <Input disabled value={roleBindingTargetRecord?.bizName || ''} />
-          </Form.Item>
-          <Form.Item
-            extra="支持多选；如果需要移除全部角色，直接清空后保存即可。"
-            label="绑定角色"
-            name="roleIds"
-          >
-            <Select
-              allowClear
-              loading={roleBindingLoading}
-              mode="multiple"
-              optionFilterProp="label"
-              options={roleOptions.map((role) => ({
-                label:
-                  role.status === 1
-                    ? `${role.name}（${role.code}）`
-                    : `${role.name}（${role.code}，停用）`,
-                value: role.id,
-              }))}
-              placeholder="请选择角色"
-              showSearch
-            />
-          </Form.Item>
-        </Form>
-      </Modal>
     </PageContainer>
   );
 }
