@@ -29,6 +29,16 @@ export const API_ENDPOINTS = {
   operation: {
     list: '/activities',
   },
+  workflowDefinition: {
+    create: '/sys/workflow-definition/create',
+    delete: '/sys/workflow-definition/delete',
+    detail: '/sys/workflow-definition/detail',
+    disable: '/sys/workflow-definition/disable',
+    list: '/sys/workflow-definition/list',
+    page: '/sys/workflow-definition/page',
+    publish: '/sys/workflow-definition/publish',
+    update: '/sys/workflow-definition/update',
+  },
   dept: {
     create: '/sys/dept/create',
     delete: '/sys/dept/delete',
