@@ -24,10 +24,8 @@ import {
   createWorkflowDefinition,
   fetchWorkflowDefinitionDetail,
   updateWorkflowDefinition,
-  type CreateWorkflowDefinitionNodePayload,
-  type CreateWorkflowDefinitionPayload,
-  type CreateWorkflowTransitionPayload,
   type WorkflowDefinitionRecord,
+  type WorkflowNodeRecord,
 } from '@/services/workflow.service';
 
 const nodeRoleOptions = [
@@ -391,33 +389,12 @@ const backendNodeTypeToCanvasConfig = {
   START: { nodeRole: 'START_END', type: 'circle' },
 } as const;
 
-function minutesToHours(value?: number) {
-  if (typeof value !== 'number' || value <= 0) {
-    return undefined;
-  }
-
-  return Math.max(1, Math.ceil(value / 60));
-}
-
 function hoursToMinutes(value?: number) {
   if (typeof value !== 'number' || value <= 0) {
     return undefined;
   }
 
   return value * 60;
-}
-
-function toBackendApproveMode(value?: string) {
-  switch (value) {
-    case 'COUNTERSIGN':
-      return 'AND';
-    case 'SEQUENTIAL_SIGN':
-      return 'SEQUENTIAL';
-    case 'OR_SIGN':
-      return 'OR';
-    default:
-      return undefined;
-  }
 }
 
 function toCanvasApproveMode(value?: string) {
@@ -428,21 +405,6 @@ function toCanvasApproveMode(value?: string) {
       return 'SEQUENTIAL_SIGN';
     case 'OR':
       return 'OR_SIGN';
-    default:
-      return undefined;
-  }
-}
-
-function toBackendTimeoutAction(value?: string) {
-  switch (value) {
-    case 'AUTO_PASS':
-      return 'AUTO_APPROVE';
-    case 'AUTO_REJECT':
-      return 'AUTO_REJECT';
-    case 'REMIND_ONLY':
-      return 'NOTIFY_ONLY';
-    case 'TRANSFER_ADMIN':
-      return 'NOTIFY_ONLY';
     default:
       return undefined;
   }
@@ -461,21 +423,6 @@ function toCanvasTimeoutStrategy(value?: string) {
   }
 }
 
-function toBackendApproverType(
-  value?: string,
-): 'USER' | 'ROLE' | 'INITIATOR_DEPT_LEADER' | undefined {
-  switch (value) {
-    case 'USER':
-      return 'USER';
-    case 'ROLE':
-      return 'ROLE';
-    case 'DEPT_LEADER':
-      return 'INITIATOR_DEPT_LEADER';
-    default:
-      return undefined;
-  }
-}
-
 function toCanvasApproverType(value?: string) {
   switch (value) {
     case 'USER':
@@ -489,16 +436,6 @@ function toCanvasApproverType(value?: string) {
   }
 }
 
-function sanitizeNodeCode(value: string, fallbackIndex: number) {
-  const normalizedValue = value
-    .trim()
-    .replace(/[^a-zA-Z0-9_]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .toUpperCase();
-
-  return (normalizedValue || `NODE_${fallbackIndex}`).slice(0, 64);
-}
-
 function isFormValidationError(error: unknown) {
   return Boolean(
     error &&
@@ -507,15 +444,67 @@ function isFormValidationError(error: unknown) {
   );
 }
 
+function isWorkflowCanvasData(value: unknown): value is WorkflowCanvasData {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as Partial<WorkflowCanvasData>;
+  return Array.isArray(candidate.nodes) && Array.isArray(candidate.edges);
+}
+
+function parseNodeConfigJson(node: WorkflowNodeRecord) {
+  if (typeof node.configJson !== 'string' || !node.configJson.trim()) {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(node.configJson) as {
+      originalNodeId?: unknown;
+      originalNodeType?: unknown;
+      uiProperties?: Record<string, unknown>;
+    };
+
+    return parsed;
+  } catch {
+    return undefined;
+  }
+}
+
 function buildCanvasDataFromDefinition(detail: WorkflowDefinitionRecord): WorkflowCanvasData {
+  // 新版后端直接把前端流程设计 JSON 原样保存到 workFlowJson。
+  // 这里优先吃这份数据，可以最大程度保留节点 id、折线路径、右键编辑后的属性等画布细节。
+  if (typeof detail.workFlowJson === 'string' && detail.workFlowJson.trim()) {
+    try {
+      const parsed = JSON.parse(detail.workFlowJson);
+
+      if (isWorkflowCanvasData(parsed)) {
+        return parsed;
+      }
+    } catch {
+      // 回填时如果 workFlowJson 被旧数据污染，继续退回到 nodeList / transitionList 构图，
+      // 这样历史流程至少还能打开，不会因为单条坏数据把整个页面卡死。
+    }
+  }
+
+  const nodeIdMap = new Map<number, string>();
   const nodes = (detail.nodeList ?? []).map((node, index) => {
+    const canvasNodeConfig = parseNodeConfigJson(node);
     const canvasConfig =
       backendNodeTypeToCanvasConfig[
         (node.nodeType as keyof typeof backendNodeTypeToCanvasConfig) ?? 'APPROVAL'
       ] ?? backendNodeTypeToCanvasConfig.APPROVAL;
+    const nodeId =
+      typeof canvasNodeConfig?.originalNodeId === 'string'
+        ? canvasNodeConfig.originalNodeId
+        : String(node.id || `NODE_${index + 1}`);
+
+    if (typeof node.id === 'number') {
+      nodeIdMap.set(node.id, nodeId);
+    }
 
     return {
-      id: String(node.code || `NODE_${index + 1}`),
+      id: nodeId,
       properties: {
         approverIds: Array.isArray(node.approverList)
           ? node.approverList.map((item) => item?.approverValue).filter(Boolean)
@@ -524,13 +513,17 @@ function buildCanvasDataFromDefinition(detail: WorkflowDefinitionRecord): Workfl
           ? toCanvasApproverType(node.approverList[0]?.approverType)
           : undefined,
         approveMode: toCanvasApproveMode(node.approveMode as string | undefined),
+        ...(canvasNodeConfig?.uiProperties ?? {}),
         nodeRole: canvasConfig.nodeRole,
         remindAfterMinutes: hoursToMinutes(node.remindHours as number | undefined),
         timeoutAfterMinutes: hoursToMinutes(node.timeoutHours as number | undefined),
         timeoutStrategy: toCanvasTimeoutStrategy(node.timeoutAction as string | undefined),
       },
       text: typeof node.name === 'string' ? node.name : `节点${index + 1}`,
-      type: canvasConfig.type,
+      type:
+        typeof canvasNodeConfig?.originalNodeType === 'string'
+          ? canvasNodeConfig.originalNodeType
+          : canvasConfig.type,
       x: Number(node.positionX ?? 200 + index * 120),
       y: Number(node.positionY ?? 220),
     } satisfies WorkflowCanvasNode;
@@ -551,12 +544,18 @@ function buildCanvasDataFromDefinition(detail: WorkflowDefinitionRecord): Workfl
         isDefault: false,
         priority,
       },
-      sourceNodeId: String(transition.fromNodeCode),
-      targetNodeId: String(transition.toNodeCode),
+      sourceNodeId:
+        typeof transition.fromNodeId === 'number'
+          ? (nodeIdMap.get(transition.fromNodeId) ?? String(transition.fromNodeId))
+          : '',
+      targetNodeId:
+        typeof transition.toNodeId === 'number'
+          ? (nodeIdMap.get(transition.toNodeId) ?? String(transition.toNodeId))
+          : '',
       text: label,
       type: 'polyline',
     } satisfies WorkflowCanvasEdge;
-  });
+  }).filter((edge) => edge.sourceNodeId && edge.targetNodeId);
 
   return {
     edges,
@@ -723,143 +722,11 @@ function ProcessDefinitionPage() {
 
   function buildWorkflowSavePayload() {
     const currentGraphData = (logicFlowRef.current?.getGraphData() ?? initialGraphData) as WorkflowCanvasData;
-    const nodes = currentGraphData.nodes ?? [];
-    const edges = currentGraphData.edges ?? [];
-    const incomingCountMap = new Map<string, number>();
-    const outgoingCountMap = new Map<string, number>();
-
-    edges.forEach((edge) => {
-      incomingCountMap.set(
-        edge.targetNodeId,
-        (incomingCountMap.get(edge.targetNodeId) ?? 0) + 1,
-      );
-      outgoingCountMap.set(
-        edge.sourceNodeId,
-        (outgoingCountMap.get(edge.sourceNodeId) ?? 0) + 1,
-      );
-    });
-
-    const usedNodeCodes = new Set<string>();
-    const nodeCodeMap = new Map<string, string>();
-
-    const ensureUniqueNodeCode = (rawCode: string) => {
-      let nextCode = rawCode;
-      let index = 1;
-
-      while (usedNodeCodes.has(nextCode)) {
-        nextCode = `${rawCode}_${index}`;
-        index += 1;
-      }
-
-      usedNodeCodes.add(nextCode);
-      return nextCode.slice(0, 64);
-    };
-
-    const workflowNodes = nodes.map<CreateWorkflowDefinitionNodePayload>((node, index) => {
-      const nodeRole =
-        typeof node.properties?.nodeRole === 'string' ? node.properties.nodeRole : undefined;
-      const incomingCount = incomingCountMap.get(node.id) ?? 0;
-      const outgoingCount = outgoingCountMap.get(node.id) ?? 0;
-      let nodeType: CreateWorkflowDefinitionNodePayload['nodeType'];
-
-      switch (nodeRole) {
-        case 'APPROVAL':
-          nodeType = 'APPROVAL';
-          break;
-        case 'CONDITION':
-          nodeType = 'CONDITION';
-          break;
-        case 'PARALLEL_SPLIT':
-          nodeType = 'PARALLEL_SPLIT';
-          break;
-        case 'PARALLEL_JOIN':
-          nodeType = 'PARALLEL_JOIN';
-          break;
-        case 'START_END':
-          nodeType = incomingCount === 0 ? 'START' : 'END';
-          break;
-        default:
-          nodeType = incomingCount === 0 ? 'START' : outgoingCount === 0 ? 'END' : 'APPROVAL';
-          break;
-      }
-
-      const rawNodeCode =
-        nodeType === 'START'
-          ? 'START'
-          : nodeType === 'END'
-            ? 'END'
-            : sanitizeNodeCode(node.id, index + 1);
-      const nodeCode = ensureUniqueNodeCode(rawNodeCode);
-
-      nodeCodeMap.set(node.id, nodeCode);
-
-      const approverType =
-        typeof node.properties?.approverType === 'string'
-          ? node.properties.approverType
-          : undefined;
-      const approverIds = Array.isArray(node.properties?.approverIds)
-        ? node.properties.approverIds
-            .map((item) => String(item).trim())
-            .filter(Boolean)
-        : [];
-      const approverList =
-        approverType && approverIds.length && toBackendApproverType(approverType)
-          ? approverIds.map((approverId, approverIndex) => ({
-              approverType: toBackendApproverType(approverType)!,
-              approverValue: approverId,
-              sortOrder: approverIndex + 1,
-            }))
-          : undefined;
-
-      return {
-        approverList,
-        approveMode: toBackendApproveMode(
-          typeof node.properties?.approveMode === 'string'
-            ? node.properties.approveMode
-            : undefined,
-        ),
-        code: nodeCode,
-        configJson: JSON.stringify({
-          edgeCount: incomingCount + outgoingCount,
-          originalNodeId: node.id,
-          originalNodeType: node.type,
-          uiProperties: node.properties ?? {},
-        }),
-        name: getTextValue(node.text) || `节点${index + 1}`,
-        nodeType,
-        positionX: Math.round(node.x),
-        positionY: Math.round(node.y),
-        remindHours: minutesToHours(
-          typeof node.properties?.remindAfterMinutes === 'number'
-            ? node.properties.remindAfterMinutes
-            : undefined,
-        ),
-        timeoutAction: toBackendTimeoutAction(
-          typeof node.properties?.timeoutStrategy === 'string'
-            ? node.properties.timeoutStrategy
-            : undefined,
-        ),
-        timeoutHours: minutesToHours(
-          typeof node.properties?.timeoutAfterMinutes === 'number'
-            ? node.properties.timeoutAfterMinutes
-            : undefined,
-        ),
-      };
-    });
-
-    const workflowTransitions = edges.map<CreateWorkflowTransitionPayload>((edge, index) => ({
-      conditionExpr:
-        typeof edge.properties?.expression === 'string' ? edge.properties.expression : undefined,
-      fromNodeCode: nodeCodeMap.get(edge.sourceNodeId) ?? sanitizeNodeCode(edge.sourceNodeId, index + 1),
-      label: getTextValue(edge.text) || undefined,
-      priority:
-        typeof edge.properties?.priority === 'number' ? edge.properties.priority : index + 1,
-      toNodeCode: nodeCodeMap.get(edge.targetNodeId) ?? sanitizeNodeCode(edge.targetNodeId, index + 1),
-    }));
-
+    // 保存链路改为直接提交前端设计 JSON。
+    // 这样后端接口升级后，前端不再需要反向推导 node/transition DTO，也能完整保留折线、锚点和 UI 属性。
     return {
-      nodes: workflowNodes,
-      transitions: workflowTransitions,
+      hasNodes: Array.isArray(currentGraphData.nodes) && currentGraphData.nodes.length > 0,
+      workFlowJson: JSON.stringify(currentGraphData),
     };
   }
 
@@ -868,7 +735,7 @@ function ProcessDefinitionPage() {
       const values = await definitionForm.validateFields();
       const payload = buildWorkflowSavePayload();
 
-      if (!payload.nodes.length) {
+      if (!payload.hasNodes) {
         message.warning('当前流程没有节点，无法保存');
         return;
       }
@@ -879,8 +746,7 @@ function ProcessDefinitionPage() {
         await updateWorkflowDefinition({
           id: currentDefinitionId,
           name: values.name.trim(),
-          nodes: payload.nodes,
-          transitions: payload.transitions,
+          workFlowJson: payload.workFlowJson,
         });
         message.success('流程保存成功');
         return;
@@ -889,9 +755,8 @@ function ProcessDefinitionPage() {
       const createdDefinition = await createWorkflowDefinition({
         code: values.code.trim(),
         name: values.name.trim(),
-        nodes: payload.nodes,
-        transitions: payload.transitions,
-      } satisfies CreateWorkflowDefinitionPayload);
+        workFlowJson: payload.workFlowJson,
+      });
 
       setCurrentDefinitionId(createdDefinition.id);
       setSearchParams({ id: String(createdDefinition.id) }, { replace: true });
@@ -1275,15 +1140,6 @@ function ProcessDefinitionPage() {
   return (
     <PageContainer
       description="流程定义页支持拖拽建模、节点与连线属性配置，并可将整个流程定义保存到后端。"
-      extra={(
-        <Button
-          loading={definitionSaving}
-          onClick={() => void handleSaveWorkflowDefinition()}
-          type="primary"
-        >
-          保存流程
-        </Button>
-      )}
       title="流程定义"
     >
       <Form<DefinitionFormValues>
@@ -1294,8 +1150,11 @@ function ProcessDefinitionPage() {
         }}
         layout="vertical"
       >
-        <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-          <Col lg={8} span={24}>
+        {/* 流程定义的基础信息和保存操作收拢到同一条工具线上。
+            这样用户在新开标签页设计流程时，名称、编码、保存入口始终在同一视觉区域内，
+            后续如果还要补“发布”“另存为”等操作，也可以继续在这一行右侧扩展。 */}
+        <Row className="workflow-definition-toolbar" gutter={[16, 16]}>
+          <Col lg={8} span={24} xl={7}>
             <Form.Item
               label="流程名称"
               name="name"
@@ -1304,9 +1163,8 @@ function ProcessDefinitionPage() {
               <Input placeholder="请输入流程名称" />
             </Form.Item>
           </Col>
-          <Col lg={8} span={24}>
+          <Col lg={8} span={24} xl={7}>
             <Form.Item
-              extra={currentDefinitionId ? '流程编码在创建后保持不变。' : undefined}
               label="流程编码"
               name="code"
               rules={[{ required: true, message: '请输入流程编码' }]}
@@ -1315,6 +1173,24 @@ function ProcessDefinitionPage() {
                 disabled={Boolean(currentDefinitionId)}
                 placeholder="请输入流程编码"
               />
+            </Form.Item>
+          </Col>
+          <Col lg={8} span={24} xl={10}>
+            {/* 保存按钮也放进 Form.Item，占位一行 label。
+                这样它会和左右两个输入框按控件区对齐，不会被 label/extra 的高度影响。 */}
+            <Form.Item
+              className="workflow-definition-toolbar__action-item"
+              label={<span aria-hidden="true">&nbsp;</span>}
+            >
+              <div className="workflow-definition-toolbar__actions">
+                <Button
+                  loading={definitionSaving}
+                  onClick={() => void handleSaveWorkflowDefinition()}
+                  type="primary"
+                >
+                  保存流程
+                </Button>
+              </div>
             </Form.Item>
           </Col>
         </Row>

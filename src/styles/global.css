@@ -173,6 +173,24 @@ body {
   flex: 1 1 auto;
 }
 
+/* 流程定义页把名称、编码、保存操作放在同一条工具线上，避免按钮悬在页头和表单脱节。
+   后续如果继续增加“发布”“校验”之类动作，直接在 actions 容器里横向追加即可。 */
+.workflow-definition-toolbar {
+  margin-bottom: 16px;
+}
+
+/* 操作列也走 Form.Item 结构，但它不需要额外的底部留白，否则会让按钮看起来比输入框更低。 */
+.workflow-definition-toolbar__action-item {
+  margin-bottom: 0;
+}
+
+/* 保存按钮单独右对齐，桌面端和两个输入框共用一行，小屏时则跟随栅格自然换行。 */
+.workflow-definition-toolbar__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
 /* 小屏下优先保证留白和结构不挤压。 */
 @media (max-width: 992px) {
   .app-header {
@@ -189,6 +207,10 @@ body {
 
   .management-toolbar {
     flex-direction: column;
+  }
+
+  .workflow-definition-toolbar__actions {
+    justify-content: flex-start;
   }
 
   .standalone-workflow-page {

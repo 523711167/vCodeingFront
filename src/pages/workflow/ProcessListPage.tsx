@@ -144,6 +144,7 @@ function ProcessListPage() {
           triggerReload();
         } catch (error) {
           showErrorMessageOnce(error, '流程发布失败');
+          throw error;
         }
       },
     });
@@ -162,6 +163,7 @@ function ProcessListPage() {
           triggerReload();
         } catch (error) {
           showErrorMessageOnce(error, '流程停用失败');
+          throw error;
         }
       },
     });
@@ -182,6 +184,8 @@ function ProcessListPage() {
           message.success('流程删除成功');
           triggerReload(pageData.records.length === 1 && query.pageNum > 1 ? query.pageNum - 1 : query.pageNum);
         } catch (error) {
+          // 删除确认框这里按当前交互要求，点击确认后无论后端成功还是失败都自动关闭。
+          // 因此只保留错误提示，不再向上抛异常拦截 Antd 的关闭行为。
           showErrorMessageOnce(error, '流程删除失败');
         }
       },
@@ -223,11 +227,22 @@ function ProcessListPage() {
     {
       key: 'action',
       title: '操作',
-      width: 260,
+      width: 320,
       render: (_, record) => (
         <Space size={4} wrap>
           <Button onClick={() => void loadDetail(record.id)} size="small" type="link">
             详情
+          </Button>
+          {/* 列表页负责流程管理入口，编辑统一新开独立设计页。
+              这样列表筛选条件和当前页码不会在进入设计器后丢失，后续接应用内多标签时也只需要替换这里。 */}
+          <Button
+            onClick={() => {
+              window.open(`/workflow/definition?id=${record.id}`, '_blank', 'noopener,noreferrer');
+            }}
+            size="small"
+            type="link"
+          >
+            编辑
           </Button>
           {record.status !== 1 && (
             <Button onClick={() => void handlePublish(record)} size="small" type="link">
@@ -249,7 +264,7 @@ function ProcessListPage() {
 
   return (
     <PageContainer
-      description="流程列表页当前已对接真实流程定义接口，支持查询、分页、详情、发布、停用和删除。"
+      description="流程列表页已按最新流程定义接口对接，支持查询、分页、详情、编辑、发布、停用和删除。"
       title="流程列表"
     >
       <Space className="toolbar" direction="vertical" size={16}>

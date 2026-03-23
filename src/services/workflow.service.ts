@@ -3,12 +3,38 @@ import { request } from '@/services/http';
 
 export type WorkflowDefinitionStatusValue = 0 | 1 | 2;
 
+export interface WorkflowNodeApproverRecord {
+  approverType?: string;
+  approverValue?: string;
+  sortOrder?: number;
+}
+
 export interface WorkflowNodeRecord {
-  [key: string]: unknown;
+  id?: number;
+  definitionId?: number;
+  name?: string;
+  nodeType?: string;
+  nodeTypeMsg?: string;
+  approveMode?: string;
+  approveModeMsg?: string;
+  timeoutHours?: number;
+  timeoutAction?: string;
+  timeoutActionMsg?: string;
+  remindHours?: number;
+  positionX?: number;
+  positionY?: number;
+  configJson?: string;
+  approverList?: WorkflowNodeApproverRecord[];
 }
 
 export interface WorkflowTransitionRecord {
-  [key: string]: unknown;
+  id?: number;
+  definitionId?: number;
+  fromNodeId?: number;
+  toNodeId?: number;
+  conditionExpr?: string;
+  priority?: number;
+  label?: string;
 }
 
 // 流程定义列表和详情当前都复用同一份返回类型。
@@ -19,6 +45,7 @@ export interface WorkflowDefinitionRecord {
   code: string;
   version: number;
   description?: string;
+  workFlowJson?: string;
   status: WorkflowDefinitionStatusValue;
   statusMsg: string;
   createdBy?: number;
@@ -54,45 +81,18 @@ export interface WorkflowDefinitionIdPayload {
   id: number;
 }
 
-export interface CreateWorkflowDefinitionNodePayload {
-  code: string;
-  name: string;
-  nodeType: 'START' | 'APPROVAL' | 'CONDITION' | 'PARALLEL_SPLIT' | 'PARALLEL_JOIN' | 'END';
-  approveMode?: 'AND' | 'OR' | 'SEQUENTIAL';
-  timeoutHours?: number;
-  timeoutAction?: 'AUTO_APPROVE' | 'AUTO_REJECT' | 'NOTIFY_ONLY';
-  remindHours?: number;
-  positionX?: number;
-  positionY?: number;
-  configJson?: string;
-  approverList?: Array<{
-    approverType: 'USER' | 'ROLE' | 'DEPT' | 'INITIATOR_DEPT_LEADER';
-    approverValue: string;
-    sortOrder?: number;
-  }>;
-}
-
-export interface CreateWorkflowTransitionPayload {
-  fromNodeCode: string;
-  toNodeCode: string;
-  label?: string;
-  priority?: number;
-}
-
 export interface CreateWorkflowDefinitionPayload {
   name: string;
   code: string;
   description?: string;
-  nodes: CreateWorkflowDefinitionNodePayload[];
-  transitions: CreateWorkflowTransitionPayload[];
+  workFlowJson: string;
 }
 
 export interface UpdateWorkflowDefinitionPayload {
   id: number;
   name: string;
   description?: string;
-  nodes: CreateWorkflowDefinitionNodePayload[];
-  transitions: CreateWorkflowTransitionPayload[];
+  workFlowJson: string;
 }
 
 export async function fetchWorkflowDefinitionPage(query: WorkflowDefinitionPageQuery) {
