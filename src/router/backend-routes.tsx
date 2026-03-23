@@ -43,8 +43,25 @@ function resolveRouteElement(menu: MenuRecord) {
   return createElement(matchedModule.default);
 }
 
+function buildMenuRoutePath(menu: MenuRecord) {
+  if (menu.type === 'MENU') {
+    return normalizePath(menu.path);
+  }
+
+  // 目录节点允许后端不配置 path。
+  // 这里为它生成一个仅前端内部使用的稳定 key，用来承接菜单展开态和祖先匹配，
+  // 避免“目录没有 path 时整个子树被过滤掉，导致后端明明返回了页面但前端看不到”。
+  return normalizePath(menu.path || `/__directory__/${menu.id}`);
+}
+
 function toAppRouteItem(menu: MenuRecord): AppRouteItem | null {
-  if (menu.status !== 1 || menu.type === 'BUTTON' || !menu.path) {
+  if (menu.status !== 1 || menu.type === 'BUTTON') {
+    return null;
+  }
+
+  // 真实页面菜单仍然必须提供 path，否则 React Router 无法注册访问路径。
+  // 目录节点则不强制要求 path，因为它只承担左侧菜单分组和展开作用。
+  if (menu.type === 'MENU' && !menu.path) {
     return null;
   }
 
@@ -54,7 +71,7 @@ function toAppRouteItem(menu: MenuRecord): AppRouteItem | null {
     .filter((child): child is AppRouteItem => Boolean(child));
 
   return {
-    path: normalizePath(menu.path),
+    path: buildMenuRoutePath(menu),
     // 目录节点继续保留在菜单树里，但不再承接页面跳转。
     // element 这里只做占位，真正是否注册成 React Router 路由由 meta.routeEnabled 决定。
     element: menu.type === 'MENU' ? resolveRouteElement(menu) : <NotFoundPage />,
