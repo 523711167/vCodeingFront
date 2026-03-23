@@ -12,14 +12,17 @@ import {
   Row,
   Select,
   Space,
-  Switch,
   Tag,
+  TreeSelect,
 } from 'antd';
 import LogicFlow from '@logicflow/core';
 import '@logicflow/core/dist/index.css';
 import { useSearchParams } from 'react-router-dom';
 import PageContainer from '@/components/PageContainer';
 import { showErrorMessageOnce } from '@/services/error-message';
+import { fetchDeptTree, type DeptTreeRecord } from '@/services/dept.service';
+import { fetchRoleList, type RoleRecord } from '@/services/role.service';
+import { fetchUserPage, type UserRecord } from '@/services/user.service';
 import {
   createWorkflowDefinition,
   fetchWorkflowDefinitionDetail,
@@ -40,8 +43,8 @@ const nodeRoleOptions = [
 const approverTypeOptions = [
   { label: '指定用户', value: 'USER' },
   { label: '指定角色', value: 'ROLE' },
-  { label: '部门负责人', value: 'DEPT_LEADER' },
-  { label: '发起人自选', value: 'INITIATOR_SELECT' },
+  { label: '指定组织', value: 'DEPT' },
+  { label: '发起人主组织主管', value: 'INITIATOR_DEPT_LEADER' },
 ] as const;
 
 const approveModeOptions = [
@@ -51,10 +54,9 @@ const approveModeOptions = [
 ] as const;
 
 const timeoutStrategyOptions = [
-  { label: '仅提醒，不自动处理', value: 'REMIND_ONLY' },
-  { label: '自动通过', value: 'AUTO_PASS' },
-  { label: '自动驳回', value: 'AUTO_REJECT' },
-  { label: '转交管理员处理', value: 'TRANSFER_ADMIN' },
+  { label: '自动通过', value: 'AUTO_APPROVE' },
+  { label: '自动拒绝', value: 'AUTO_REJECT' },
+  { label: '仅提醒', value: 'NOTIFY_ONLY' },
 ] as const;
 
 const conditionTypeOptions = [
@@ -62,214 +64,11 @@ const conditionTypeOptions = [
   { label: '表达式条件', value: 'EXPRESSION' },
 ] as const;
 
-// 初始流程图直接放一个“条件判断 + 并行审批”的示例，方便同时演示节点属性和连线条件。
-// 后续接真实流程定义接口时，可以继续沿用当前 properties 结构，不需要推翻整套交互。
-const initialGraphData = {
-  nodes: [
-    {
-      id: 'start-node',
-      properties: {
-        nodeRole: 'START_END',
-      },
-      text: '开始',
-      type: 'circle',
-      x: 120,
-      y: 220,
-    },
-    {
-      id: 'condition-node',
-      properties: {
-        nodeRole: 'CONDITION',
-        remindAfterMinutes: 10,
-        timeoutAfterMinutes: 60,
-        timeoutStrategy: 'REMIND_ONLY',
-      },
-      text: '金额判断',
-      type: 'diamond',
-      x: 300,
-      y: 220,
-    },
-    {
-      id: 'parallel-split-node',
-      properties: {
-        nodeRole: 'PARALLEL_SPLIT',
-      },
-      text: '并行拆分',
-      type: 'diamond',
-      x: 480,
-      y: 220,
-    },
-    {
-      id: 'approve-finance-node',
-      properties: {
-        approveMode: 'COUNTERSIGN',
-        approverIds: ['finance_manager'],
-        approverType: 'ROLE',
-        nodeRole: 'APPROVAL',
-        remindAfterMinutes: 30,
-        timeoutAfterMinutes: 240,
-        timeoutStrategy: 'REMIND_ONLY',
-      },
-      text: '财务审批',
-      type: 'rect',
-      x: 720,
-      y: 140,
-    },
-    {
-      id: 'approve-hr-node',
-      properties: {
-        approveMode: 'OR_SIGN',
-        approverIds: ['hr_manager'],
-        approverType: 'ROLE',
-        nodeRole: 'APPROVAL',
-        remindAfterMinutes: 15,
-        timeoutAfterMinutes: 120,
-        timeoutStrategy: 'AUTO_PASS',
-      },
-      text: '人事审批',
-      type: 'rect',
-      x: 720,
-      y: 300,
-    },
-    {
-      id: 'parallel-join-node',
-      properties: {
-        nodeRole: 'PARALLEL_JOIN',
-      },
-      text: '并行聚合',
-      type: 'diamond',
-      x: 940,
-      y: 220,
-    },
-    {
-      id: 'end-node',
-      properties: {
-        nodeRole: 'START_END',
-      },
-      text: '结束',
-      type: 'circle',
-      x: 1160,
-      y: 220,
-    },
-  ],
-  edges: [
-    {
-      id: 'edge-start-condition',
-      properties: {
-        conditionType: 'ALWAYS',
-        expression: '',
-        isDefault: false,
-        priority: 1,
-      },
-      sourceNodeId: 'start-node',
-      targetNodeId: 'condition-node',
-      text: '提交申请',
-      type: 'polyline',
-    },
-    {
-      id: 'edge-condition-split',
-      properties: {
-        conditionType: 'EXPRESSION',
-        expression: 'amount >= 5000',
-        isDefault: false,
-        priority: 10,
-      },
-      sourceNodeId: 'condition-node',
-      targetNodeId: 'parallel-split-node',
-      text: '进入审批',
-      type: 'polyline',
-    },
-    {
-      id: 'edge-condition-end',
-      properties: {
-        conditionType: 'EXPRESSION',
-        expression: 'amount < 5000',
-        isDefault: true,
-        priority: 20,
-      },
-      // 条件节点默认右锚点是 x + 30，结束节点默认左锚点是 x - 50。
-      // 这里显式固定锚点和折线坐标，避免 LogicFlow 自动推导时把“无需审批”分支画歪。
-      // 这条“无需审批”分支故意从上方绕行，避免与主审批链路挤在同一水平线上难以查看。
-      // 后续如果改成真实流程数据，可以继续由后端返回 pointsList 或在前端按布局规则动态生成。
-      pointsList: [
-        { x: 330, y: 220 },
-        { x: 330, y: 80 },
-        { x: 1110, y: 80 },
-        { x: 1110, y: 220 },
-      ],
-      sourceNodeId: 'condition-node',
-      sourceAnchorId: 'condition-node_1',
-      targetNodeId: 'end-node',
-      targetAnchorId: 'end-node_3',
-      text: '无需审批',
-      type: 'polyline',
-    },
-    {
-      id: 'edge-split-finance',
-      properties: {
-        conditionType: 'EXPRESSION',
-        expression: 'department === "FINANCE" || amount >= 10000',
-        isDefault: false,
-        priority: 30,
-      },
-      sourceNodeId: 'parallel-split-node',
-      targetNodeId: 'approve-finance-node',
-      text: '财务线',
-      type: 'polyline',
-    },
-    {
-      id: 'edge-split-hr',
-      properties: {
-        conditionType: 'EXPRESSION',
-        expression: 'department !== "FINANCE"',
-        isDefault: true,
-        priority: 40,
-      },
-      sourceNodeId: 'parallel-split-node',
-      targetNodeId: 'approve-hr-node',
-      text: '人事线',
-      type: 'polyline',
-    },
-    {
-      id: 'edge-finance-join',
-      properties: {
-        conditionType: 'ALWAYS',
-        expression: '',
-        isDefault: false,
-        priority: 50,
-      },
-      sourceNodeId: 'approve-finance-node',
-      targetNodeId: 'parallel-join-node',
-      text: '审批通过',
-      type: 'polyline',
-    },
-    {
-      id: 'edge-hr-join',
-      properties: {
-        conditionType: 'ALWAYS',
-        expression: '',
-        isDefault: false,
-        priority: 60,
-      },
-      sourceNodeId: 'approve-hr-node',
-      targetNodeId: 'parallel-join-node',
-      text: '审批通过',
-      type: 'polyline',
-    },
-    {
-      id: 'edge-join-end',
-      properties: {
-        conditionType: 'ALWAYS',
-        expression: '',
-        isDefault: false,
-        priority: 70,
-      },
-      sourceNodeId: 'parallel-join-node',
-      targetNodeId: 'end-node',
-      text: '流程结束',
-      type: 'polyline',
-    },
-  ],
+// 新建流程默认从空白画布开始，避免演示数据污染真实流程设计。
+// 后续如果要接“模板新建”，建议单独走模板加载入口，而不是再把示例图塞回默认态。
+const initialWorkflowCanvasData = {
+  edges: [],
+  nodes: [],
 };
 
 // 物料区先覆盖审批流里最常见的一组节点。
@@ -329,7 +128,7 @@ interface SelectedElementState {
 
 interface NodeFormValues {
   approveMode?: string;
-  approverIds?: string;
+  approverIds?: string | string[];
   approverType?: string;
   nodeName: string;
   nodeRole?: string;
@@ -342,7 +141,6 @@ interface EdgeFormValues {
   conditionExpression?: string;
   conditionType?: string;
   edgeName: string;
-  isDefault?: boolean;
   priority?: number;
 }
 
@@ -351,8 +149,16 @@ interface HistoryActionState {
   canUndo: boolean;
 }
 
+interface DeptTreeSelectOption {
+  title: string;
+  value: string;
+  disabled?: boolean;
+  children?: DeptTreeSelectOption[];
+}
+
 interface DefinitionFormValues {
   code: string;
+  description?: string;
   name: string;
 }
 
@@ -379,6 +185,14 @@ interface WorkflowCanvasData {
   nodes: WorkflowCanvasNode[];
   edges: WorkflowCanvasEdge[];
 }
+
+type WorkflowNodeRoleValue =
+  | 'APPROVAL'
+  | 'CONDITION'
+  | 'COPY'
+  | 'PARALLEL_JOIN'
+  | 'PARALLEL_SPLIT'
+  | 'START_END';
 
 const backendNodeTypeToCanvasConfig = {
   APPROVAL: { nodeRole: 'APPROVAL', type: 'rect' },
@@ -413,11 +227,11 @@ function toCanvasApproveMode(value?: string) {
 function toCanvasTimeoutStrategy(value?: string) {
   switch (value) {
     case 'AUTO_APPROVE':
-      return 'AUTO_PASS';
+      return 'AUTO_APPROVE';
     case 'AUTO_REJECT':
       return 'AUTO_REJECT';
     case 'NOTIFY_ONLY':
-      return 'REMIND_ONLY';
+      return 'NOTIFY_ONLY';
     default:
       return undefined;
   }
@@ -429,8 +243,10 @@ function toCanvasApproverType(value?: string) {
       return 'USER';
     case 'ROLE':
       return 'ROLE';
+    case 'DEPT':
+      return 'DEPT';
     case 'INITIATOR_DEPT_LEADER':
-      return 'DEPT_LEADER';
+      return 'INITIATOR_DEPT_LEADER';
     default:
       return undefined;
   }
@@ -541,7 +357,6 @@ function buildCanvasDataFromDefinition(detail: WorkflowDefinitionRecord): Workfl
       properties: {
         conditionType: conditionExpr ? 'EXPRESSION' : 'ALWAYS',
         expression: conditionExpr,
-        isDefault: false,
         priority,
       },
       sourceNodeId:
@@ -575,27 +390,207 @@ function getTextValue(text: unknown) {
   return '';
 }
 
-function normalizeApproverIds(input?: string) {
+function normalizeApproverIds(input?: string | string[]) {
+  if (Array.isArray(input)) {
+    return input
+      .map((item) => String(item).trim())
+      .filter(Boolean);
+  }
+
   return input
     ?.split(/[\n,，]/)
     .map((item) => item.trim())
     .filter(Boolean) ?? [];
 }
 
-function stringifyApproverIds(value: unknown) {
-  return Array.isArray(value) ? value.join(', ') : '';
+function stringifyApproverIds(value: unknown, approverType?: string) {
+  if (Array.isArray(value)) {
+    return approverType === 'ROLE' || approverType === 'USER' || approverType === 'DEPT'
+      ? value
+      : value.join(', ');
+  }
+
+  return approverType === 'ROLE' || approverType === 'USER' || approverType === 'DEPT'
+    ? []
+    : '';
+}
+
+function buildDeptTreeSelectData(
+  nodes: DeptTreeRecord[],
+  disabledDeptIds: Set<string>,
+): DeptTreeSelectOption[] {
+  return nodes.map((node) => ({
+    disabled: disabledDeptIds.has(String(node.id)),
+    title: node.name,
+    value: String(node.id),
+    children: node.children ? buildDeptTreeSelectData(node.children, disabledDeptIds) : undefined,
+  }));
+}
+
+function flattenDeptTree(nodes: DeptTreeRecord[]): DeptTreeRecord[] {
+  return nodes.flatMap((node) => [
+    node,
+    ...flattenDeptTree(node.children ?? []),
+  ]);
+}
+
+function buildDeptParentIdMap(
+  nodes: DeptTreeRecord[],
+  parentIdMap = new Map<string, string>(),
+) {
+  nodes.forEach((node) => {
+    parentIdMap.set(String(node.id), String(node.parentId));
+
+    if (node.children?.length) {
+      buildDeptParentIdMap(node.children, parentIdMap);
+    }
+  });
+
+  return parentIdMap;
+}
+
+function buildDeptDescendantIdsMap(
+  nodes: DeptTreeRecord[],
+  descendantIdsMap = new Map<string, string[]>(),
+) {
+  nodes.forEach((node) => {
+    const descendantIds = flattenDeptTree(node.children ?? []).map((child) => String(child.id));
+
+    descendantIdsMap.set(String(node.id), descendantIds);
+
+    if (node.children?.length) {
+      buildDeptDescendantIdsMap(node.children, descendantIdsMap);
+    }
+  });
+
+  return descendantIdsMap;
+}
+
+function collectAncestorDeptIds(
+  deptId: string,
+  parentIdMap: Map<string, string>,
+) {
+  const ancestorIds: string[] = [];
+  let currentParentId = parentIdMap.get(deptId);
+
+  while (currentParentId && currentParentId !== '0') {
+    ancestorIds.push(currentParentId);
+    currentParentId = parentIdMap.get(currentParentId);
+  }
+
+  return ancestorIds;
+}
+
+function hasSelectedAncestorDept(
+  deptId: string,
+  selectedDeptIds: string[],
+  parentIdMap: Map<string, string>,
+) {
+  return collectAncestorDeptIds(deptId, parentIdMap).some((ancestorId) =>
+    selectedDeptIds.includes(ancestorId),
+  );
+}
+
+function normalizeSelectedDeptIds(
+  nextDeptIds: string[],
+  previousDeptIds: string[],
+  parentIdMap: Map<string, string>,
+  descendantIdsMap: Map<string, string[]>,
+) {
+  let normalizedDeptIds = previousDeptIds.filter((deptId) => nextDeptIds.includes(deptId));
+  const addedDeptIds = nextDeptIds.filter((deptId) => !previousDeptIds.includes(deptId));
+
+  addedDeptIds.forEach((deptId) => {
+    if (hasSelectedAncestorDept(deptId, normalizedDeptIds, parentIdMap)) {
+      return;
+    }
+
+    const descendantDeptIds = descendantIdsMap.get(deptId) ?? [];
+
+    normalizedDeptIds = normalizedDeptIds.filter(
+      (selectedDeptId) => !descendantDeptIds.includes(selectedDeptId),
+    );
+    normalizedDeptIds.push(deptId);
+  });
+
+  return normalizedDeptIds;
+}
+
+function buildDisabledDeptIds(
+  selectedDeptIds: string[],
+  parentIdMap: Map<string, string>,
+  descendantIdsMap: Map<string, string[]>,
+) {
+  const disabledDeptIds = new Set<string>();
+
+  selectedDeptIds.forEach((deptId) => {
+    collectAncestorDeptIds(deptId, parentIdMap).forEach((ancestorId) => {
+      disabledDeptIds.add(ancestorId);
+    });
+
+    (descendantIdsMap.get(deptId) ?? []).forEach((descendantId) => {
+      disabledDeptIds.add(descendantId);
+    });
+  });
+
+  selectedDeptIds.forEach((deptId) => {
+    disabledDeptIds.delete(deptId);
+  });
+
+  return disabledDeptIds;
+}
+
+function inferNodeRoleFromCanvasNode(nodeData: {
+  properties?: Record<string, unknown>;
+  text?: unknown;
+  type?: string;
+}): WorkflowNodeRoleValue | undefined {
+  const explicitNodeRole =
+    typeof nodeData.properties?.nodeRole === 'string'
+      ? (nodeData.properties.nodeRole as WorkflowNodeRoleValue)
+      : undefined;
+
+  if (explicitNodeRole) {
+    return explicitNodeRole;
+  }
+
+  const nodeText = getTextValue(nodeData.text);
+
+  if (nodeData.type === 'circle') {
+    return 'START_END';
+  }
+
+  if (nodeData.type === 'rect') {
+    return 'APPROVAL';
+  }
+
+  if (nodeData.type === 'diamond') {
+    if (nodeText.includes('并行拆分')) {
+      return 'PARALLEL_SPLIT';
+    }
+
+    if (nodeText.includes('并行聚合')) {
+      return 'PARALLEL_JOIN';
+    }
+
+    // 旧图数据里如果没有显式 nodeRole，菱形节点默认按条件节点处理，
+    // 这样至少不会丢掉时限配置和条件节点属性面板。
+    return 'CONDITION';
+  }
+
+  return undefined;
 }
 
 function ProcessDefinitionPage() {
   const { message } = AntdApp.useApp();
   const [searchParams, setSearchParams] = useSearchParams();
+  const readonlyMode = searchParams.get('readonly') === '1';
   const [definitionForm] = Form.useForm<DefinitionFormValues>();
   const [nodeForm] = Form.useForm<NodeFormValues>();
   const [edgeForm] = Form.useForm<EdgeFormValues>();
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const logicFlowRef = useRef<LogicFlow | null>(null);
-  const nodeSequenceRef = useRef(initialGraphData.nodes.length + 1);
   const [currentDefinitionId, setCurrentDefinitionId] = useState<number | null>(() => {
     const rawDefinitionId = Number(searchParams.get('id') ?? '');
 
@@ -609,20 +604,50 @@ function ProcessDefinitionPage() {
     canRedo: false,
     canUndo: false,
   });
+  const [deptTreeOptions, setDeptTreeOptions] = useState<DeptTreeRecord[]>([]);
+  const [deptTreeOptionsLoading, setDeptTreeOptionsLoading] = useState(false);
+  const [roleOptions, setRoleOptions] = useState<RoleRecord[]>([]);
+  const [roleOptionsLoading, setRoleOptionsLoading] = useState(false);
+  const [userOptions, setUserOptions] = useState<UserRecord[]>([]);
+  const [userOptionsLoading, setUserOptionsLoading] = useState(false);
   const [selectedElement, setSelectedElement] = useState<SelectedElementState | null>(null);
+  const [selectedNodeRoleState, setSelectedNodeRoleState] = useState<WorkflowNodeRoleValue | undefined>();
+  const [selectedApproverTypeState, setSelectedApproverTypeState] = useState<string | undefined>();
   const [graphSnapshot, setGraphSnapshot] = useState(
-    JSON.stringify(initialGraphData, null, 2),
+    JSON.stringify(initialWorkflowCanvasData, null, 2),
   );
 
   const sidePanelVisible = Boolean(selectedElement) || !graphDataCollapsed;
-  const selectedNodeRole = Form.useWatch('nodeRole', nodeForm);
+  const selectedApproverIds = Form.useWatch('approverIds', nodeForm);
+  const selectedNodeRole = selectedNodeRoleState;
   const isApprovalNodeSelected = selectedElement?.type === 'node' && selectedNodeRole === 'APPROVAL';
-  const supportsTimingConfig = selectedElement?.type === 'node' && selectedNodeRole !== 'START_END';
+  const supportsTimingConfig = selectedElement?.type === 'node' && selectedNodeRole === 'APPROVAL';
+  const selectedApproverDeptIds =
+    selectedApproverTypeState === 'DEPT' && Array.isArray(selectedApproverIds)
+      ? selectedApproverIds.map((item) => String(item))
+      : [];
+  const approverDeptParentIdMap = useMemo(
+    () => buildDeptParentIdMap(deptTreeOptions),
+    [deptTreeOptions],
+  );
+  const approverDeptDescendantIdsMap = useMemo(
+    () => buildDeptDescendantIdsMap(deptTreeOptions),
+    [deptTreeOptions],
+  );
+  const disabledApproverDeptIds = useMemo(
+    () =>
+      buildDisabledDeptIds(
+        selectedApproverDeptIds,
+        approverDeptParentIdMap,
+        approverDeptDescendantIdsMap,
+      ),
+    [approverDeptDescendantIdsMap, approverDeptParentIdMap, selectedApproverDeptIds],
+  );
 
   function syncGraphSnapshot() {
     const currentGraphData = logicFlowRef.current?.getGraphData();
 
-    setGraphSnapshot(JSON.stringify(currentGraphData ?? initialGraphData, null, 2));
+    setGraphSnapshot(JSON.stringify(currentGraphData ?? initialWorkflowCanvasData, null, 2));
   }
 
   function renderWorkflowGraph(nextGraphData: WorkflowCanvasData) {
@@ -634,6 +659,7 @@ function ProcessDefinitionPage() {
 
     logicFlow.render(nextGraphData);
     setSelectedElement(null);
+    setSelectedNodeRoleState(undefined);
     setContextMenuState(null);
     syncGraphSnapshot();
     syncHistoryActionState();
@@ -642,6 +668,14 @@ function ProcessDefinitionPage() {
 
   function syncHistoryActionState() {
     const logicFlow = logicFlowRef.current;
+
+    if (readonlyMode) {
+      setHistoryActionState({
+        canRedo: false,
+        canUndo: false,
+      });
+      return;
+    }
 
     setHistoryActionState({
       canRedo: Boolean(logicFlow?.history.redoAble()),
@@ -661,24 +695,27 @@ function ProcessDefinitionPage() {
 
       if (!nodeData) {
         setSelectedElement(null);
+        setSelectedNodeRoleState(undefined);
         return;
       }
+
+      const inferredNodeRole = inferNodeRoleFromCanvasNode(nodeData);
+      const approverType =
+        typeof nodeData.properties?.approverType === 'string'
+          ? nodeData.properties.approverType
+          : undefined;
+      setSelectedNodeRoleState(inferredNodeRole);
+      setSelectedApproverTypeState(approverType);
 
       nodeForm.setFieldsValue({
         approveMode:
           typeof nodeData.properties?.approveMode === 'string'
             ? nodeData.properties.approveMode
             : undefined,
-        approverIds: stringifyApproverIds(nodeData.properties?.approverIds),
-        approverType:
-          typeof nodeData.properties?.approverType === 'string'
-            ? nodeData.properties.approverType
-            : undefined,
+        approverIds: stringifyApproverIds(nodeData.properties?.approverIds, approverType),
+        approverType,
         nodeName: getTextValue(nodeData.text),
-        nodeRole:
-          typeof nodeData.properties?.nodeRole === 'string'
-            ? nodeData.properties.nodeRole
-            : undefined,
+        nodeRole: inferredNodeRole,
         remindAfterMinutes:
           typeof nodeData.properties?.remindAfterMinutes === 'number'
             ? nodeData.properties.remindAfterMinutes
@@ -699,9 +736,13 @@ function ProcessDefinitionPage() {
 
     if (!edgeData) {
       setSelectedElement(null);
+      setSelectedNodeRoleState(undefined);
+      setSelectedApproverTypeState(undefined);
       return;
     }
 
+    setSelectedNodeRoleState(undefined);
+    setSelectedApproverTypeState(undefined);
     edgeForm.setFieldsValue({
       conditionExpression:
         typeof edgeData.properties?.expression === 'string'
@@ -712,7 +753,6 @@ function ProcessDefinitionPage() {
           ? edgeData.properties.conditionType
           : 'ALWAYS',
       edgeName: getTextValue(edgeData.text),
-      isDefault: Boolean(edgeData.properties?.isDefault),
       priority:
         typeof edgeData.properties?.priority === 'number'
           ? edgeData.properties.priority
@@ -720,8 +760,19 @@ function ProcessDefinitionPage() {
     });
   }
 
+  function handleApproverDeptIdsChange(nextDeptIds: string[]) {
+    const normalizedDeptIds = normalizeSelectedDeptIds(
+      nextDeptIds,
+      selectedApproverDeptIds,
+      approverDeptParentIdMap,
+      approverDeptDescendantIdsMap,
+    );
+
+    nodeForm.setFieldValue('approverIds', normalizedDeptIds);
+  }
+
   function buildWorkflowSavePayload() {
-    const currentGraphData = (logicFlowRef.current?.getGraphData() ?? initialGraphData) as WorkflowCanvasData;
+    const currentGraphData = (logicFlowRef.current?.getGraphData() ?? initialWorkflowCanvasData) as WorkflowCanvasData;
     // 保存链路改为直接提交前端设计 JSON。
     // 这样后端接口升级后，前端不再需要反向推导 node/transition DTO，也能完整保留折线、锚点和 UI 属性。
     return {
@@ -731,6 +782,10 @@ function ProcessDefinitionPage() {
   }
 
   async function handleSaveWorkflowDefinition() {
+    if (readonlyMode) {
+      return;
+    }
+
     try {
       const values = await definitionForm.validateFields();
       const payload = buildWorkflowSavePayload();
@@ -744,6 +799,7 @@ function ProcessDefinitionPage() {
 
       if (currentDefinitionId) {
         await updateWorkflowDefinition({
+          description: values.description?.trim() || undefined,
           id: currentDefinitionId,
           name: values.name.trim(),
           workFlowJson: payload.workFlowJson,
@@ -754,6 +810,7 @@ function ProcessDefinitionPage() {
 
       const createdDefinition = await createWorkflowDefinition({
         code: values.code.trim(),
+        description: values.description?.trim() || undefined,
         name: values.name.trim(),
         workFlowJson: payload.workFlowJson,
       });
@@ -813,7 +870,7 @@ function ProcessDefinitionPage() {
     });
 
     logicFlowRef.current = logicFlow;
-    logicFlow.render(initialGraphData);
+    logicFlow.render(initialWorkflowCanvasData);
     logicFlow.fitView(40, 40);
     syncGraphSnapshot();
     syncHistoryActionState();
@@ -845,6 +902,16 @@ function ProcessDefinitionPage() {
     // 节点和连线右键都收口到一套上下文菜单状态，便于后续继续扩展“复制、重命名、属性”动作。
     logicFlow.on('node:contextmenu', ({ data, e }) => {
       e.preventDefault();
+
+      if (readonlyMode) {
+        setContextMenuState(null);
+        setSelectedElement({
+          id: data.id,
+          type: 'node',
+        });
+        return;
+      }
+
       const menuPosition = getContextMenuPosition(e);
       setSelectedElement({
         id: data.id,
@@ -859,6 +926,16 @@ function ProcessDefinitionPage() {
     });
     logicFlow.on('edge:contextmenu', ({ data, e }) => {
       e.preventDefault();
+
+      if (readonlyMode) {
+        setContextMenuState(null);
+        setSelectedElement({
+          id: data.id,
+          type: 'edge',
+        });
+        return;
+      }
+
       const menuPosition = getContextMenuPosition(e);
       setSelectedElement({
         id: data.id,
@@ -885,7 +962,23 @@ function ProcessDefinitionPage() {
       logicFlow.destroy();
       logicFlowRef.current = null;
     };
-  }, []);
+  }, [readonlyMode]);
+
+  useEffect(() => {
+    const logicFlow = logicFlowRef.current;
+
+    if (!logicFlow) {
+      return;
+    }
+
+    // 详情态切换到 LogicFlow 静默模式，直接禁用节点/连线拖拽、锚点和键盘删除。
+    // 这样仍然保留选中查看属性的能力，但不会误改流程图。
+    logicFlow.updateEditConfig({
+      isSilentMode: readonlyMode,
+    });
+    setContextMenuState(null);
+    syncHistoryActionState();
+  }, [readonlyMode]);
 
   useEffect(() => {
     // 右键菜单只在点击菜单外部时关闭，避免点击“删除”按钮时被全局 click 监听提前打断。
@@ -934,11 +1027,139 @@ function ProcessDefinitionPage() {
     if (!selectedElement) {
       nodeForm.resetFields();
       edgeForm.resetFields();
+      setSelectedNodeRoleState(undefined);
+      setSelectedApproverTypeState(undefined);
       return;
     }
 
     syncSelectedElementPanel();
   }, [edgeForm, nodeForm, selectedElement]);
+
+  useEffect(() => {
+    if (selectedApproverTypeState !== 'DEPT' || deptTreeOptions.length) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function run() {
+      try {
+        setDeptTreeOptionsLoading(true);
+        const deptTree = await fetchDeptTree({ status: 1 });
+
+        if (!cancelled) {
+          setDeptTreeOptions(deptTree);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          showErrorMessageOnce(error, '组织树加载失败');
+        }
+      } finally {
+        if (!cancelled) {
+          setDeptTreeOptionsLoading(false);
+        }
+      }
+    }
+
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [deptTreeOptions.length, selectedApproverTypeState]);
+
+  useEffect(() => {
+    if (selectedApproverTypeState !== 'ROLE' || roleOptions.length) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function run() {
+      try {
+        setRoleOptionsLoading(true);
+        const roleList = await fetchRoleList({ status: 1 });
+
+        if (!cancelled) {
+          setRoleOptions(roleList);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          showErrorMessageOnce(error, '角色列表加载失败');
+        }
+      } finally {
+        if (!cancelled) {
+          setRoleOptionsLoading(false);
+        }
+      }
+    }
+
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [roleOptions.length, selectedApproverTypeState]);
+
+  useEffect(() => {
+    if (selectedApproverTypeState !== 'USER' || userOptions.length) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function run() {
+      try {
+        setUserOptionsLoading(true);
+        // 审批节点选择用户时优先加载启用状态用户，并限制在一页内满足当前配置场景。
+        // 如果后续用户量明显增大，再把这里升级为远程搜索下拉。
+        const pageResult = await fetchUserPage({
+          pageNum: 1,
+          pageSize: 200,
+          status: 1,
+        });
+
+        if (!cancelled) {
+          setUserOptions(pageResult.records);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          showErrorMessageOnce(error, '用户列表加载失败');
+        }
+      } finally {
+        if (!cancelled) {
+          setUserOptionsLoading(false);
+        }
+      }
+    }
+
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedApproverTypeState, userOptions.length]);
+
+  useEffect(() => {
+    const currentApproverIds = nodeForm.getFieldValue('approverIds');
+
+    if (
+      selectedApproverTypeState === 'ROLE' ||
+      selectedApproverTypeState === 'USER' ||
+      selectedApproverTypeState === 'DEPT'
+    ) {
+      if (!Array.isArray(currentApproverIds)) {
+        nodeForm.setFieldValue('approverIds', normalizeApproverIds(currentApproverIds));
+      }
+      return;
+    }
+
+    if (Array.isArray(currentApproverIds)) {
+      // 审核人类型在“指定角色”和文本输入型配置之间切换时，统一在这里做值形态转换，
+      // 避免 TextArea 收到数组值或多选下拉收到整段字符串。
+      nodeForm.setFieldValue('approverIds', currentApproverIds.join(', '));
+    }
+  }, [nodeForm, selectedApproverTypeState]);
 
   useEffect(() => {
     const rawDefinitionId = Number(searchParams.get('id') ?? '');
@@ -947,9 +1168,10 @@ function ProcessDefinitionPage() {
       setCurrentDefinitionId(null);
       definitionForm.setFieldsValue({
         code: '',
+        description: '',
         name: '',
       });
-      renderWorkflowGraph(initialGraphData as WorkflowCanvasData);
+      renderWorkflowGraph(initialWorkflowCanvasData as WorkflowCanvasData);
       return;
     }
 
@@ -967,6 +1189,7 @@ function ProcessDefinitionPage() {
         setCurrentDefinitionId(detail.id);
         definitionForm.setFieldsValue({
           code: detail.code,
+          description: detail.description ?? '',
           name: detail.name,
         });
         renderWorkflowGraph(buildCanvasDataFromDefinition(detail));
@@ -988,24 +1211,11 @@ function ProcessDefinitionPage() {
     };
   }, [definitionForm, searchParams]);
 
-  function resetDemoGraph() {
-    const logicFlow = logicFlowRef.current;
-
-    if (!logicFlow) {
+  function clearWorkflowGraph() {
+    if (readonlyMode) {
       return;
     }
 
-    nodeSequenceRef.current = initialGraphData.nodes.length + 1;
-    logicFlow.render(initialGraphData);
-    setSelectedElement(null);
-    setContextMenuState(null);
-    syncGraphSnapshot();
-    syncHistoryActionState();
-    logicFlow.fitView(40, 40);
-    message.success('已恢复默认 Demo');
-  }
-
-  function clearDemoGraph() {
     const logicFlow = logicFlowRef.current;
 
     if (!logicFlow) {
@@ -1024,6 +1234,10 @@ function ProcessDefinitionPage() {
     event: ReactMouseEvent<HTMLButtonElement>,
     material: (typeof draggableNodeMaterials)[number],
   ) {
+    if (readonlyMode) {
+      return;
+    }
+
     const logicFlow = logicFlowRef.current;
 
     if (!logicFlow) {
@@ -1039,9 +1253,10 @@ function ProcessDefinitionPage() {
         approverIds: material.nodeRole === 'APPROVAL' ? [] : undefined,
         approverType: material.nodeRole === 'APPROVAL' ? 'USER' : undefined,
         nodeRole: material.nodeRole,
+        // 当前交互只有审批节点支持时限设置，其余节点不再预置这组属性。
         remindAfterMinutes: material.nodeRole === 'APPROVAL' ? 30 : undefined,
         timeoutAfterMinutes: material.nodeRole === 'APPROVAL' ? 120 : undefined,
-        timeoutStrategy: material.nodeRole === 'APPROVAL' ? 'REMIND_ONLY' : undefined,
+        timeoutStrategy: material.nodeRole === 'APPROVAL' ? 'NOTIFY_ONLY' : undefined,
       },
       text: material.text,
       type: material.type,
@@ -1051,6 +1266,10 @@ function ProcessDefinitionPage() {
   }
 
   function deleteContextMenuTarget() {
+    if (readonlyMode) {
+      return;
+    }
+
     const logicFlow = logicFlowRef.current;
 
     if (!logicFlow || !contextMenuState) {
@@ -1069,6 +1288,10 @@ function ProcessDefinitionPage() {
   }
 
   function undoCanvasChange() {
+    if (readonlyMode) {
+      return;
+    }
+
     const logicFlow = logicFlowRef.current;
 
     if (!logicFlow?.history.undoAble()) {
@@ -1083,6 +1306,10 @@ function ProcessDefinitionPage() {
   }
 
   function redoCanvasChange() {
+    if (readonlyMode) {
+      return;
+    }
+
     const logicFlow = logicFlowRef.current;
 
     if (!logicFlow?.history.redoAble()) {
@@ -1094,7 +1321,36 @@ function ProcessDefinitionPage() {
     syncHistoryActionState();
   }
 
-  function handleNodeFormChange(_: unknown, allValues: NodeFormValues) {
+  function handleNodeFormChange(changedValues: Partial<NodeFormValues>, allValues: NodeFormValues) {
+    if (readonlyMode) {
+      return;
+    }
+
+    if (typeof allValues.nodeRole === 'string') {
+      setSelectedNodeRoleState(allValues.nodeRole as WorkflowNodeRoleValue);
+    }
+    const approverTypeChanged = Object.prototype.hasOwnProperty.call(changedValues, 'approverType');
+    const nextApproverIds =
+      approverTypeChanged
+        ? []
+        : normalizeApproverIds(allValues.approverIds);
+
+    if (typeof allValues.approverType === 'string' || allValues.approverType === undefined) {
+      if (allValues.approverType !== selectedApproverTypeState) {
+        // 审核人类型切换后，旧的审核人数据语义已经不成立。
+        // 这里强制清空，避免用户误把“角色ID”或“组织ID”沿用到新的审核人类型里。
+        nodeForm.setFieldValue(
+          'approverIds',
+          allValues.approverType === 'ROLE' ||
+            allValues.approverType === 'USER' ||
+            allValues.approverType === 'DEPT'
+            ? []
+            : '',
+        );
+      }
+      setSelectedApproverTypeState(allValues.approverType);
+    }
+
     const logicFlow = logicFlowRef.current;
 
     if (!logicFlow || selectedElement?.type !== 'node') {
@@ -1104,7 +1360,7 @@ function ProcessDefinitionPage() {
     logicFlow.updateText(selectedElement.id, allValues.nodeName || '未命名节点');
     logicFlow.setProperties(selectedElement.id, {
       approveMode: allValues.approveMode,
-      approverIds: normalizeApproverIds(allValues.approverIds),
+      approverIds: nextApproverIds,
       approverType: allValues.approverType,
       nodeRole: allValues.nodeRole,
       remindAfterMinutes: allValues.remindAfterMinutes,
@@ -1115,6 +1371,10 @@ function ProcessDefinitionPage() {
   }
 
   function handleEdgeFormChange(_: unknown, allValues: EdgeFormValues) {
+    if (readonlyMode) {
+      return;
+    }
+
     const logicFlow = logicFlowRef.current;
 
     if (!logicFlow || selectedElement?.type !== 'edge') {
@@ -1125,7 +1385,6 @@ function ProcessDefinitionPage() {
     logicFlow.setProperties(selectedElement.id, {
       conditionType: allValues.conditionType,
       expression: allValues.conditionExpression,
-      isDefault: Boolean(allValues.isDefault),
       priority: allValues.priority,
     });
     syncGraphSnapshot();
@@ -1139,13 +1398,19 @@ function ProcessDefinitionPage() {
 
   return (
     <PageContainer
-      description="流程定义页支持拖拽建模、节点与连线属性配置，并可将整个流程定义保存到后端。"
-      title="流程定义"
+      description={
+        readonlyMode
+          ? '流程详情页仅允许查看流程图、节点属性和连线条件，不允许执行任何编辑操作。'
+          : '流程定义页支持拖拽建模、节点与连线属性配置，并可将整个流程定义保存到后端。'
+      }
+      title={readonlyMode ? '流程详情' : '流程定义'}
     >
       <Form<DefinitionFormValues>
+        disabled={readonlyMode}
         form={definitionForm}
         initialValues={{
           code: '',
+          description: '',
           name: '',
         }}
         layout="vertical"
@@ -1183,14 +1448,30 @@ function ProcessDefinitionPage() {
               label={<span aria-hidden="true">&nbsp;</span>}
             >
               <div className="workflow-definition-toolbar__actions">
-                <Button
-                  loading={definitionSaving}
-                  onClick={() => void handleSaveWorkflowDefinition()}
-                  type="primary"
-                >
-                  保存流程
-                </Button>
+                {!readonlyMode && (
+                  <Button
+                    loading={definitionSaving}
+                    onClick={() => void handleSaveWorkflowDefinition()}
+                    type="primary"
+                  >
+                    保存流程
+                  </Button>
+                )}
               </div>
+            </Form.Item>
+          </Col>
+        </Row>
+        {/* 描述字段单独占一行，避免把顶部工具线挤乱。
+            后续如果要扩展分类、业务标识等补充信息，也可以继续沿用这一层全宽表单区。 */}
+        <Row gutter={[16, 16]}>
+          <Col span={24}>
+            <Form.Item label="流程描述" name="description">
+              <Input.TextArea
+                autoSize={{ maxRows: 3, minRows: 2 }}
+                maxLength={500}
+                placeholder="请输入流程描述"
+                showCount
+              />
             </Form.Item>
           </Col>
         </Row>
@@ -1206,7 +1487,8 @@ function ProcessDefinitionPage() {
       )}
 
       <Row gutter={[16, 16]}>
-        <Col lg={4} span={24}>
+        {!readonlyMode && (
+          <Col lg={4} span={24}>
           <Card title="快捷操作">
             <Space direction="vertical" size={12} style={{ width: '100%' }}>
               <Button block disabled={!historyActionState.canUndo} onClick={undoCanvasChange}>
@@ -1215,10 +1497,7 @@ function ProcessDefinitionPage() {
               <Button block disabled={!historyActionState.canRedo} onClick={redoCanvasChange}>
                 恢复操作
               </Button>
-              <Button block onClick={resetDemoGraph}>
-                恢复默认 Demo
-              </Button>
-              <Button block danger onClick={clearDemoGraph}>
+              <Button block danger onClick={clearWorkflowGraph}>
                 清空画布
               </Button>
             </Space>
@@ -1250,9 +1529,10 @@ function ProcessDefinitionPage() {
               ))}
             </Space>
           </Card>
-        </Col>
+          </Col>
+        )}
 
-        <Col lg={sidePanelVisible ? 14 : 20} span={24}>
+        <Col lg={readonlyMode ? (sidePanelVisible ? 18 : 24) : (sidePanelVisible ? 14 : 20)} span={24}>
           <Card
             extra={
               <Button
@@ -1277,7 +1557,7 @@ function ProcessDefinitionPage() {
                 width: '100%',
               }}
             >
-              {contextMenuState && (
+              {contextMenuState && !readonlyMode && (
                 <div
                   ref={contextMenuRef}
                   onClick={(event) => event.stopPropagation()}
@@ -1336,6 +1616,7 @@ function ProcessDefinitionPage() {
                     {nodeRoleTag && <Tag>{nodeRoleTag}</Tag>}
                   </Space>
                   <Form<NodeFormValues>
+                    disabled={readonlyMode}
                     form={nodeForm}
                     layout="vertical"
                     onValuesChange={handleNodeFormChange}
@@ -1359,14 +1640,58 @@ function ProcessDefinitionPage() {
                           />
                         </Form.Item>
                         <Form.Item
-                          extra="多个审核人可用英文逗号、中文逗号或换行分隔。"
+                          extra={
+                            selectedApproverTypeState === 'ROLE'
+                              ? '可多选角色，流程运行时按所选角色匹配审批人。'
+                              : selectedApproverTypeState === 'USER'
+                                ? '可多选用户，流程运行时将按所选用户发起审批。'
+                                : selectedApproverTypeState === 'DEPT'
+                                  ? '可多选组织，父子节点不能同时选中，选中逻辑与用户绑定组织保持一致。'
+                              : '多个审核人可用英文逗号、中文逗号或换行分隔。'
+                          }
                           label="审核人"
                           name="approverIds"
                         >
-                          <Input.TextArea
-                            placeholder="例如：zhangsan, lisi"
-                            rows={3}
-                          />
+                          {selectedApproverTypeState === 'ROLE' ? (
+                            <Select
+                              loading={roleOptionsLoading}
+                              mode="multiple"
+                              optionFilterProp="label"
+                              options={roleOptions.map((role) => ({
+                                label: `${role.name} (${role.code})`,
+                                value: String(role.id),
+                              }))}
+                              placeholder="请选择角色"
+                            />
+                          ) : selectedApproverTypeState === 'USER' ? (
+                            <Select
+                              loading={userOptionsLoading}
+                              mode="multiple"
+                              optionFilterProp="label"
+                              options={userOptions.map((user) => ({
+                                label: `${user.realName} (${user.username})`,
+                                value: String(user.id),
+                              }))}
+                              placeholder="请选择用户"
+                            />
+                          ) : selectedApproverTypeState === 'DEPT' ? (
+                            <TreeSelect
+                              allowClear
+                              loading={deptTreeOptionsLoading}
+                              maxTagCount="responsive"
+                              multiple
+                              onChange={(value) => handleApproverDeptIdsChange((value as string[]) ?? [])}
+                              placeholder="请选择组织"
+                              showSearch
+                              treeData={buildDeptTreeSelectData(deptTreeOptions, disabledApproverDeptIds)}
+                              treeDefaultExpandAll
+                            />
+                          ) : (
+                            <Input.TextArea
+                              placeholder="例如：zhangsan, lisi"
+                              rows={3}
+                            />
+                          )}
                         </Form.Item>
                         <Form.Item label="审核方式" name="approveMode">
                           <Select
@@ -1417,6 +1742,7 @@ function ProcessDefinitionPage() {
                 <Space direction="vertical" size={12} style={{ width: '100%' }}>
                   <Tag color="purple">连线</Tag>
                   <Form<EdgeFormValues>
+                    disabled={readonlyMode}
                     form={edgeForm}
                     layout="vertical"
                     onValuesChange={handleEdgeFormChange}
@@ -1440,9 +1766,6 @@ function ProcessDefinitionPage() {
                     </Form.Item>
                     <Form.Item label="优先级" name="priority">
                       <InputNumber min={0} precision={0} style={{ width: '100%' }} />
-                    </Form.Item>
-                    <Form.Item label="默认分支" name="isDefault" valuePropName="checked">
-                      <Switch />
                     </Form.Item>
                   </Form>
                 </Space>

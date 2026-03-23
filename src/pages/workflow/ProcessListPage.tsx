@@ -3,8 +3,6 @@ import type { ColumnsType } from 'antd/es/table';
 import {
   App as AntdApp,
   Button,
-  Descriptions,
-  Drawer,
   Form,
   Input,
   Select,
@@ -18,7 +16,6 @@ import { showErrorMessageOnce } from '@/services/error-message';
 import {
   deleteWorkflowDefinition,
   disableWorkflowDefinition,
-  fetchWorkflowDefinitionDetail,
   fetchWorkflowDefinitionPage,
   publishWorkflowDefinition,
   type WorkflowDefinitionPageQuery,
@@ -71,9 +68,6 @@ function ProcessListPage() {
   const [reloadVersion, setReloadVersion] = useState(0);
   const [pageData, setPageData] = useState<WorkflowDefinitionPageResult>(initialPageData);
   const [tableLoading, setTableLoading] = useState(false);
-  const [detailOpen, setDetailOpen] = useState(false);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [detailRecord, setDetailRecord] = useState<WorkflowDefinitionRecord | null>(null);
 
   useEffect(() => {
     let canceled = false;
@@ -116,19 +110,6 @@ function ProcessListPage() {
       ...previousQuery,
       pageNum,
     }));
-  }
-
-  async function loadDetail(recordId: number) {
-    try {
-      setDetailLoading(true);
-      const detail = await fetchWorkflowDefinitionDetail(recordId);
-      setDetailRecord(detail);
-      setDetailOpen(true);
-    } catch (error) {
-      showErrorMessageOnce(error, '流程详情加载失败');
-    } finally {
-      setDetailLoading(false);
-    }
   }
 
   async function handlePublish(record: WorkflowDefinitionRecord) {
@@ -230,7 +211,15 @@ function ProcessListPage() {
       width: 320,
       render: (_, record) => (
         <Space size={4} wrap>
-          <Button onClick={() => void loadDetail(record.id)} size="small" type="link">
+          {/* 详情页直接打开只读流程设计器，和编辑页共用同一份渲染能力，
+              这样后续流程图、节点属性、连线条件扩展后，详情态也不需要再维护第二套展示页面。 */}
+          <Button
+            onClick={() => {
+              window.open(`/workflow/definition?id=${record.id}&readonly=1`, '_blank', 'noopener,noreferrer');
+            }}
+            size="small"
+            type="link"
+          >
             详情
           </Button>
           {/* 列表页负责流程管理入口，编辑统一新开独立设计页。
@@ -365,53 +354,6 @@ function ProcessListPage() {
           rowKey="id"
         />
       </Space>
-
-      <Drawer
-        destroyOnClose
-        loading={detailLoading}
-        onClose={() => {
-          setDetailOpen(false);
-          setDetailRecord(null);
-        }}
-        open={detailOpen}
-        title="流程详情"
-        width={720}
-      >
-        {detailRecord && (
-          <Descriptions column={1} size="small">
-            <Descriptions.Item label="流程名称">
-              {detailRecord.name}
-            </Descriptions.Item>
-            <Descriptions.Item label="流程编码">
-              {detailRecord.code}
-            </Descriptions.Item>
-            <Descriptions.Item label="版本号">
-              {detailRecord.version}
-            </Descriptions.Item>
-            <Descriptions.Item label="状态">
-              <Tag color={getWorkflowStatusTagColor(detailRecord.status)}>
-                {detailRecord.statusMsg}
-              </Tag>
-            </Descriptions.Item>
-            <Descriptions.Item label="流程描述">
-              {detailRecord.description || '-'}
-            </Descriptions.Item>
-            <Descriptions.Item label="节点数量">
-              {detailRecord.nodeList?.length ?? 0}
-            </Descriptions.Item>
-            <Descriptions.Item label="连线数量">
-              {detailRecord.transitionList?.length ?? 0}
-            </Descriptions.Item>
-            <Descriptions.Item label="创建时间">
-              {detailRecord.createdAt || '-'}
-            </Descriptions.Item>
-            <Descriptions.Item label="更新时间">
-              {detailRecord.updatedAt || '-'}
-            </Descriptions.Item>
-          </Descriptions>
-        )}
-      </Drawer>
-
     </PageContainer>
   );
 }

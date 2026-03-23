@@ -17,7 +17,9 @@ function normalizePath(path?: string) {
 }
 
 function resolveRouteElement(menu: MenuRecord) {
-  const normalizedComponent = menu.component?.trim();
+  // 后端当前已经开始返回带前导斜杠的 component，例如 /pages/business/BusinessDefinitionPage。
+  // 这里先统一裁掉前导斜杠，避免同一份组件路径因为格式差异导致前端找不到模块。
+  const normalizedComponent = menu.component?.trim().replace(/^\/+/, '');
 
   if (
     !normalizedComponent ||

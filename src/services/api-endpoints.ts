@@ -15,6 +15,19 @@ export const API_BASE_URLS = {
 // API_ENDPOINTS 按业务域组织路径，目的是让调用方在 import 后就能看出接口归属。
 // 如果后续系统管理模块接真接口，也优先从这里继续补充 user / role / menu 域。
 export const API_ENDPOINTS = {
+  // biz 域对应“业务定义”菜单。
+  // 这里独立成一个分组，是为了把业务建模类接口和流程定义、系统管理接口区分开，
+  // 后续如果再补业务对象、业务规则、业务表单，也继续沿着这个域扩展。
+  biz: {
+    create: '/sys/biz/create',
+    delete: '/sys/biz/delete',
+    detail: '/sys/biz/detail',
+    list: '/sys/biz/list',
+    page: '/sys/biz/page',
+    roles: '/sys/biz/roles',
+    updateRoles: '/sys/biz/roles/update',
+    update: '/sys/biz/update',
+  },
   dashboard: {
     overview: '/dashboard/overview',
   },
