@@ -20,6 +20,7 @@ export const API_ENDPOINTS = {
   // 后续如果再补业务对象、业务规则、业务表单，也继续沿着这个域扩展。
   biz: {
     create: '/sys/biz/create',
+    currentUserPage: '/sys/biz/current-user/page',
     delete: '/sys/biz/delete',
     detail: '/sys/biz/detail',
     list: '/sys/biz/list',

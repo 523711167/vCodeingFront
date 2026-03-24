@@ -86,6 +86,18 @@ export async function fetchBizDefinitionPage(query: BizDefinitionPageQuery) {
   });
 }
 
+export async function fetchCurrentUserBizDefinitionPage(
+  query: BizDefinitionPageQuery,
+) {
+  return request<BizDefinitionPageResult>({
+    method: 'get',
+    params: query,
+    // 工作台“业务办理”需要命中“当前用户可查看”的专用分页接口，
+    // 和系统管理里的全量业务定义分页分开，避免把本不该看到的业务入口直接暴露给当前用户。
+    url: API_ENDPOINTS.biz.currentUserPage,
+  });
+}
+
 export async function fetchBizDefinitionList(
   query: BizDefinitionListQuery = {},
 ) {
