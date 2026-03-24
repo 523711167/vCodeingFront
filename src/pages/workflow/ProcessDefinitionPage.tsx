@@ -141,6 +141,7 @@ interface EdgeFormValues {
   conditionExpression?: string;
   conditionType?: string;
   edgeName: string;
+  isDefault?: boolean;
   priority?: number;
 }
 
@@ -287,6 +288,64 @@ function parseNodeConfigJson(node: WorkflowNodeRecord) {
   }
 }
 
+function isDefaultBranchRole(role?: WorkflowNodeRoleValue) {
+  return role === 'CONDITION' || role === 'PARALLEL_SPLIT';
+}
+
+function normalizeEdgeDefaultValue(value: unknown) {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'number') {
+    return value === 1;
+  }
+
+  if (typeof value === 'string') {
+    return value === '1' || value.toLowerCase() === 'true';
+  }
+
+  return false;
+}
+
+function getNodeName(node: WorkflowCanvasNode) {
+  return getTextValue(node.text) || '未命名节点';
+}
+
+function validateWorkflowBranchDefaults(graphData: WorkflowCanvasData) {
+  const nodesById = new Map(graphData.nodes.map((node) => [node.id, node]));
+
+  for (const node of graphData.nodes) {
+    const nodeRole = inferNodeRoleFromCanvasNode(node);
+
+    if (!isDefaultBranchRole(nodeRole)) {
+      continue;
+    }
+
+    const outgoingEdges = graphData.edges.filter((edge) => edge.sourceNodeId === node.id);
+
+    if (!outgoingEdges.length) {
+      return `${getNodeName(node)} 至少需要配置一条分支`;
+    }
+
+    const defaultBranchCount = outgoingEdges.filter((edge) =>
+      normalizeEdgeDefaultValue(edge.properties?.is_default),
+    ).length;
+
+    if (defaultBranchCount !== 1) {
+      return `${getNodeName(node)} 必须且只能设置一条默认分支`;
+    }
+
+    const missingTargetEdge = outgoingEdges.find((edge) => !nodesById.has(edge.targetNodeId));
+
+    if (missingTargetEdge) {
+      return `${getNodeName(node)} 存在未正确连接的分支，请检查连线`;
+    }
+  }
+
+  return null;
+}
+
 function buildCanvasDataFromDefinition(detail: WorkflowDefinitionRecord): WorkflowCanvasData {
   // 新版后端直接把前端流程设计 JSON 原样保存到 workFlowJson。
   // 这里优先吃这份数据，可以最大程度保留节点 id、折线路径、右键编辑后的属性等画布细节。
@@ -351,12 +410,16 @@ function buildCanvasDataFromDefinition(detail: WorkflowDefinitionRecord): Workfl
     const label = typeof transition.label === 'string' ? transition.label : '';
     const priority =
       typeof transition.priority === 'number' ? transition.priority : undefined;
+    const isDefaultBranch = normalizeEdgeDefaultValue(
+      transition.isDefault ?? transition.is_default,
+    );
 
     return {
       id: String(transition.id || `EDGE_${index + 1}`),
       properties: {
         conditionType: conditionExpr ? 'EXPRESSION' : 'ALWAYS',
         expression: conditionExpr,
+        is_default: isDefaultBranch,
         priority,
       },
       sourceNodeId:
@@ -612,6 +675,8 @@ function ProcessDefinitionPage() {
   const [userOptionsLoading, setUserOptionsLoading] = useState(false);
   const [selectedElement, setSelectedElement] = useState<SelectedElementState | null>(null);
   const [selectedNodeRoleState, setSelectedNodeRoleState] = useState<WorkflowNodeRoleValue | undefined>();
+  const [selectedEdgeSourceNodeRoleState, setSelectedEdgeSourceNodeRoleState] =
+    useState<WorkflowNodeRoleValue | undefined>();
   const [selectedApproverTypeState, setSelectedApproverTypeState] = useState<string | undefined>();
   const [graphSnapshot, setGraphSnapshot] = useState(
     JSON.stringify(initialWorkflowCanvasData, null, 2),
@@ -622,6 +687,8 @@ function ProcessDefinitionPage() {
   const selectedNodeRole = selectedNodeRoleState;
   const isApprovalNodeSelected = selectedElement?.type === 'node' && selectedNodeRole === 'APPROVAL';
   const supportsTimingConfig = selectedElement?.type === 'node' && selectedNodeRole === 'APPROVAL';
+  const supportsDefaultEdgeConfig =
+    selectedElement?.type === 'edge' && isDefaultBranchRole(selectedEdgeSourceNodeRoleState);
   const selectedApproverDeptIds =
     selectedApproverTypeState === 'DEPT' && Array.isArray(selectedApproverIds)
       ? selectedApproverIds.map((item) => String(item))
@@ -660,6 +727,7 @@ function ProcessDefinitionPage() {
     logicFlow.render(nextGraphData);
     setSelectedElement(null);
     setSelectedNodeRoleState(undefined);
+    setSelectedEdgeSourceNodeRoleState(undefined);
     setContextMenuState(null);
     syncGraphSnapshot();
     syncHistoryActionState();
@@ -696,6 +764,7 @@ function ProcessDefinitionPage() {
       if (!nodeData) {
         setSelectedElement(null);
         setSelectedNodeRoleState(undefined);
+        setSelectedEdgeSourceNodeRoleState(undefined);
         return;
       }
 
@@ -743,6 +812,12 @@ function ProcessDefinitionPage() {
 
     setSelectedNodeRoleState(undefined);
     setSelectedApproverTypeState(undefined);
+    const sourceNodeData = edgeData.sourceNodeId
+      ? logicFlow.getNodeDataById(edgeData.sourceNodeId)
+      : undefined;
+    setSelectedEdgeSourceNodeRoleState(
+      sourceNodeData ? inferNodeRoleFromCanvasNode(sourceNodeData) : undefined,
+    );
     edgeForm.setFieldsValue({
       conditionExpression:
         typeof edgeData.properties?.expression === 'string'
@@ -753,6 +828,7 @@ function ProcessDefinitionPage() {
           ? edgeData.properties.conditionType
           : 'ALWAYS',
       edgeName: getTextValue(edgeData.text),
+      isDefault: normalizeEdgeDefaultValue(edgeData.properties?.is_default),
       priority:
         typeof edgeData.properties?.priority === 'number'
           ? edgeData.properties.priority
@@ -792,6 +868,15 @@ function ProcessDefinitionPage() {
 
       if (!payload.hasNodes) {
         message.warning('当前流程没有节点，无法保存');
+        return;
+      }
+
+      const currentGraphData = (logicFlowRef.current?.getGraphData() ??
+        initialWorkflowCanvasData) as WorkflowCanvasData;
+      const branchValidationMessage = validateWorkflowBranchDefaults(currentGraphData);
+
+      if (branchValidationMessage) {
+        message.warning(branchValidationMessage);
         return;
       }
 
@@ -1028,6 +1113,7 @@ function ProcessDefinitionPage() {
       nodeForm.resetFields();
       edgeForm.resetFields();
       setSelectedNodeRoleState(undefined);
+      setSelectedEdgeSourceNodeRoleState(undefined);
       setSelectedApproverTypeState(undefined);
       return;
     }
@@ -1381,10 +1467,35 @@ function ProcessDefinitionPage() {
       return;
     }
 
+    const currentEdgeData = logicFlow.getEdgeDataById(selectedElement.id);
+
     logicFlow.updateText(selectedElement.id, allValues.edgeName || '');
+
+    if (
+      allValues.isDefault &&
+      currentEdgeData?.sourceNodeId &&
+      isDefaultBranchRole(selectedEdgeSourceNodeRoleState)
+    ) {
+      const currentGraphData = logicFlow.getGraphData() as WorkflowCanvasData;
+
+      currentGraphData.edges
+        .filter(
+          (edge) =>
+            edge.id &&
+            edge.id !== selectedElement.id &&
+            edge.sourceNodeId === currentEdgeData.sourceNodeId,
+        )
+        .forEach((edge) => {
+          logicFlow.setProperties(edge.id as string, {
+            is_default: false,
+          });
+        });
+    }
+
     logicFlow.setProperties(selectedElement.id, {
       conditionType: allValues.conditionType,
       expression: allValues.conditionExpression,
+      is_default: Boolean(allValues.isDefault),
       priority: allValues.priority,
     });
     syncGraphSnapshot();
@@ -1750,6 +1861,21 @@ function ProcessDefinitionPage() {
                     <Form.Item label="连线名称" name="edgeName">
                       <Input placeholder="请输入连线名称" />
                     </Form.Item>
+                    {supportsDefaultEdgeConfig && (
+                      <Form.Item
+                        extra="条件节点和并行拆分节点的分支必须且只能设置一条默认分支。"
+                        label="默认分支"
+                        name="isDefault"
+                      >
+                        <Select
+                          options={[
+                            { label: '是', value: true },
+                            { label: '否', value: false },
+                          ]}
+                          placeholder="请选择是否为默认分支"
+                        />
+                      </Form.Item>
+                    )}
                     <Form.Item label="条件类型" name="conditionType">
                       <Select
                         options={conditionTypeOptions.map((option) => ({

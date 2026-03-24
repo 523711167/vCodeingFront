@@ -33,6 +33,8 @@ export interface WorkflowTransitionRecord {
   fromNodeId?: number;
   toNodeId?: number;
   conditionExpr?: string;
+  isDefault?: boolean | number;
+  is_default?: boolean | number;
   priority?: number;
   label?: string;
 }
