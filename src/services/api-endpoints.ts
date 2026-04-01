@@ -29,6 +29,11 @@ export const API_ENDPOINTS = {
     updateRoles: '/sys/biz/roles/update',
     update: '/sys/biz/update',
   },
+  // bizApply 域承接“业务办理/草稿/提交审批”这类运行态接口。
+  // 这样可以和业务定义配置接口拆开，避免页面在 import 时把配置态和运行态混成一组。
+  bizApply: {
+    saveDraft: '/sys/biz-apply/save',
+  },
   dashboard: {
     overview: '/dashboard/overview',
   },

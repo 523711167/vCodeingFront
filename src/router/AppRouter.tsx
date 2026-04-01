@@ -4,6 +4,7 @@ import { Navigate, useRoutes } from 'react-router-dom';
 import { flattenRoutes } from '@/features/permission/filterRoutes';
 import { getDefaultRoutePath } from '@/services/auth.service';
 import MainLayout from '@/layouts/MainLayout';
+import BusinessHandlePage from '@/pages/workbench/BusinessHandlePage';
 import ProcessDefinitionPage from '@/pages/workflow/ProcessDefinitionPage';
 import { buildBackendRoutes } from '@/router/backend-routes';
 import { publicRoutes } from '@/router/routes';
@@ -87,6 +88,11 @@ function AppRouter() {
             // 这样当后端只下发系统管理权限时，也不会被重定向到无权页面。
             index: true,
             element: <Navigate replace to={defaultRoutePath} />,
+          },
+          {
+            // 办理页保持在主布局内容区中渲染，避免跳出当前后台工作区。
+            path: 'workbench/inbox/handle',
+            element: <BusinessHandlePage />,
           },
           ...toRouteObjects(allowedBusinessRoutes),
           ...knownModuleFallbacks,

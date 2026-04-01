@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ColumnsType } from 'antd/es/table';
 import { Button, Form, Input, Select, Space, Table, Tag } from 'antd';
+import { useNavigate } from 'react-router-dom';
 import PageContainer from '@/components/PageContainer';
 import {
   fetchCurrentUserBizDefinitionPage,
@@ -40,6 +41,7 @@ function getStatusTagColor(status: BizDefinitionStatusValue) {
 }
 
 function InboxPage() {
+  const navigate = useNavigate();
   const [searchForm] = Form.useForm<SearchFormValues>();
   const [query, setQuery] = useState<BizDefinitionPageQuery>(initialPageQuery);
   const [pageData, setPageData] = useState<BizDefinitionPageResult>(initialPageData);
@@ -107,10 +109,16 @@ function InboxPage() {
       key: 'action',
       title: '操作',
       width: 140,
-      render: () => (
-        // 业务办理列表这一步先完成“当前用户可见业务定义”的查询对接。
-        // 后续如果要接发起流程、打开表单、草稿保存等动作，优先从这里继续补。
-        <Button size="small" type="link">
+      render: (_, record) => (
+        // “办理”改成站内跳转，保持用户仍处在后台主布局范围内。
+        // 后续如果要升级成应用内多标签，也优先从这里继续扩展，而不是再退回浏览器新开页。
+        <Button
+          onClick={() => {
+            navigate(`/workbench/inbox/handle?id=${record.id}`);
+          }}
+          size="small"
+          type="link"
+        >
           办理
         </Button>
       ),
