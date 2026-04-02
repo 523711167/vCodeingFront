@@ -11,7 +11,10 @@ import {
 } from '@/services/biz-apply.service';
 import { fetchBizDefinitionList } from '@/services/biz.service';
 import { showErrorMessageOnce } from '@/services/error-message';
-import { submitWorkflowBiz } from '@/services/workflow.service';
+import {
+  fetchWorkflowDefinitionList,
+  submitWorkflowBiz,
+} from '@/services/workflow.service';
 
 interface DraftSearchFormValues {
   title?: string;
@@ -51,7 +54,19 @@ function DraftPage() {
 
     async function run() {
       try {
-        const bizDefinitions = await fetchBizDefinitionList();
+        // 业务定义返回结果已经不再直接包含 workflowDefinitionId，
+        // 草稿箱需要额外拿一份流程定义列表，按流程编码还原“流程ID”展示列。
+        const [bizDefinitions, workflowDefinitions] = await Promise.all([
+          fetchBizDefinitionList(),
+          fetchWorkflowDefinitionList(),
+        ]);
+        const workflowIdByCode = workflowDefinitions.reduce<Record<string, number>>(
+          (accumulator, currentRecord) => {
+            accumulator[currentRecord.code] = currentRecord.id;
+            return accumulator;
+          },
+          {},
+        );
 
         if (!canceled) {
           // 草稿分页当前只有 bizDefinitionId，没有直接返回业务名称，
@@ -65,7 +80,9 @@ function DraftPage() {
           setWorkflowIdMap(
             bizDefinitions.reduce<Record<number, number | undefined>>(
               (accumulator, currentRecord) => {
-                accumulator[currentRecord.id] = currentRecord.workflowDefinitionId;
+                accumulator[currentRecord.id] = currentRecord.workflowDefinitionCode
+                  ? workflowIdByCode[currentRecord.workflowDefinitionCode]
+                  : undefined;
                 return accumulator;
               },
               {},

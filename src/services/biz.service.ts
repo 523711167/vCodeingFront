@@ -10,7 +10,8 @@ export interface BizDefinitionRecord {
   bizCode: string;
   bizName: string;
   bizDesc?: string;
-  workflowDefinitionId?: number;
+  // 业务定义新版接口已经把“绑定流程”统一收口到流程编码，
+  // 页面展示和回填都应该以 code/name 为准，避免继续依赖已经移除的流程 ID 字段。
   workflowDefinitionCode?: string;
   workflowDefinitionName?: string;
   status: BizDefinitionStatusValue;
@@ -25,7 +26,7 @@ export interface BizDefinitionPageQuery {
   pageSize: number;
   bizCode?: string;
   bizName?: string;
-  workflowDefinitionId?: number;
+  workflowDefinitionCode?: string;
   status?: BizDefinitionStatusValue;
 }
 
@@ -40,7 +41,7 @@ export interface BizDefinitionPageResult {
 export interface BizDefinitionListQuery {
   bizCode?: string;
   bizName?: string;
-  workflowDefinitionId?: number;
+  workflowDefinitionCode?: string;
   status?: BizDefinitionStatusValue;
 }
 
@@ -48,7 +49,7 @@ export interface CreateBizDefinitionPayload {
   bizCode: string;
   bizName: string;
   bizDesc?: string;
-  workflowDefinitionId?: number;
+  workflowDefinitionCode: string;
   status: BizDefinitionStatusValue;
 }
 
@@ -56,7 +57,7 @@ export interface UpdateBizDefinitionPayload {
   id: number;
   bizName: string;
   bizDesc?: string;
-  workflowDefinitionId?: number;
+  workflowDefinitionCode: string;
   // 后端已将角色绑定并入业务定义编辑接口。
   // OpenAPI 文档当前还没完全体现这个字段，这里先按联调结果补齐 roleIds，
   // 避免前端继续依赖旧的“单独绑定角色”接口。

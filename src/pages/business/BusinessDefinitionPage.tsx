@@ -39,7 +39,7 @@ import {
 interface SearchFormValues {
   bizCode?: string;
   bizName?: string;
-  workflowDefinitionId?: number;
+  workflowDefinitionCode?: string;
   status?: BizDefinitionStatusValue;
 }
 
@@ -48,7 +48,7 @@ interface BizDefinitionFormValues {
   bizName: string;
   bizDesc?: string;
   roleIds?: number[];
-  workflowDefinitionId?: number;
+  workflowDefinitionCode: string;
   status: BizDefinitionStatusValue;
 }
 
@@ -248,7 +248,7 @@ function BusinessDefinitionPage() {
         bizName: detail.bizName,
         roleIds: bizRoleRecord.roleIds,
         status: detail.status,
-        workflowDefinitionId: detail.workflowDefinitionId,
+        workflowDefinitionCode: detail.workflowDefinitionCode,
       });
     } catch (error) {
       setEditorOpen(false);
@@ -269,7 +269,7 @@ function BusinessDefinitionPage() {
           bizDesc: values.bizDesc?.trim() || undefined,
           bizName: values.bizName.trim(),
           status: values.status,
-          workflowDefinitionId: values.workflowDefinitionId,
+          workflowDefinitionCode: values.workflowDefinitionCode,
         } satisfies CreateBizDefinitionPayload);
         message.success('业务定义新增成功');
       } else if (editingId) {
@@ -279,7 +279,7 @@ function BusinessDefinitionPage() {
           id: editingId,
           roleIds: values.roleIds ?? [],
           status: values.status,
-          workflowDefinitionId: values.workflowDefinitionId,
+          workflowDefinitionCode: values.workflowDefinitionCode,
         } satisfies UpdateBizDefinitionPayload);
         message.success('业务定义修改成功');
       }
@@ -324,7 +324,9 @@ function BusinessDefinitionPage() {
     () =>
       workflowDefinitions.map((record) => ({
         label: `${record.name}（${record.code}）`,
-        value: record.id,
+        // 编辑接口现在直接要求 workflowDefinitionCode，
+        // 下拉值改成 code 之后，表单提交就不需要再做二次映射了。
+        value: record.code,
       })),
     [workflowDefinitions],
   );
@@ -412,7 +414,7 @@ function BusinessDefinitionPage() {
                 pageNum: 1,
                 pageSize: query.pageSize,
                 status: values.status,
-                workflowDefinitionId: values.workflowDefinitionId,
+                workflowDefinitionCode: values.workflowDefinitionCode,
               });
             }}
           >
@@ -422,7 +424,7 @@ function BusinessDefinitionPage() {
             <Form.Item label="业务编码" name="bizCode">
               <Input allowClear placeholder="请输入业务编码" />
             </Form.Item>
-            <Form.Item label="绑定流程" name="workflowDefinitionId">
+            <Form.Item label="绑定流程" name="workflowDefinitionCode">
               <Select
                 allowClear
                 loading={workflowOptionsLoading}
@@ -584,7 +586,16 @@ function BusinessDefinitionPage() {
             <Form.Item label="业务描述" name="bizDesc">
               <Input.TextArea placeholder="请输入业务描述" rows={4} />
             </Form.Item>
-            <Form.Item label="绑定流程" name="workflowDefinitionId">
+            <Form.Item
+              label="绑定流程"
+              name="workflowDefinitionCode"
+              rules={[
+                {
+                  required: true,
+                  message: '请选择流程定义',
+                },
+              ]}
+            >
               <Select
                 allowClear
                 loading={workflowOptionsLoading}
