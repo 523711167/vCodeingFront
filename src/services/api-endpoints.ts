@@ -36,6 +36,7 @@ export const API_ENDPOINTS = {
     draftPage: '/sys/biz-apply/draft/page',
     queryDetail: '/sys/biz-apply/query/detail',
     queryPage: '/sys/biz-apply/query/page',
+    saveAndSubmit: '/sys/biz-apply/save-and-submit',
     todoDetail: '/sys/biz-apply/todo/detail',
     todoPage: '/sys/biz-apply/todo/page',
     // 最新草稿写接口已经收敛到 /draft/save 和 /draft/update。
@@ -53,6 +54,10 @@ export const API_ENDPOINTS = {
     introspect: '/oauth2/introspect',
     revoke: '/oauth2/revoke',
     token: '/oauth2/token',
+  },
+  auth: {
+    loginLogDetail: '/sys/auth/login-log/detail',
+    loginLogPage: '/sys/auth/login-log/page',
   },
   operation: {
     list: '/activities',

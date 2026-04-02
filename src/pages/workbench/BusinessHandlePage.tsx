@@ -21,6 +21,7 @@ import PageContainer from '@/components/PageContainer';
 import {
   fetchBizApplyDraftDetail,
   saveBizApplyDraft,
+  saveAndSubmitBizApply,
   updateBizApplyDraft,
 } from '@/services/biz-apply.service';
 import {
@@ -28,6 +29,7 @@ import {
   type BizDefinitionRecord,
 } from '@/services/biz.service';
 import { showErrorMessageOnce } from '@/services/error-message';
+import { submitWorkflowBiz } from '@/services/workflow.service';
 
 type BusinessFormType = 'fish' | 'leave' | 'reimbursement' | 'unknown';
 
@@ -157,6 +159,7 @@ function BusinessHandlePage() {
   const [handleForm] = Form.useForm<BusinessHandleFormValues>();
   const [detailLoading, setDetailLoading] = useState(false);
   const [draftSaving, setDraftSaving] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [detailRecord, setDetailRecord] = useState<BizDefinitionRecord | null>(null);
   const [editingDraftId, setEditingDraftId] = useState<number | null>(null);
   const rawBizDefinitionId = Number(searchParams.get('id') ?? '');
@@ -325,6 +328,89 @@ function BusinessHandlePage() {
     }
   }
 
+  async function handleSubmitBusiness() {
+    if (!bizDefinitionId) {
+      message.warning('缺少业务定义 ID，无法提交办理');
+      return;
+    }
+
+    if (businessFormType === 'unknown') {
+      message.warning('当前业务类型暂未配置办理表单，请联系管理员确认业务定义');
+      return;
+    }
+
+    try {
+      // 提交办理和保存草稿共用同一套必填校验，
+      // 这样三种业务类型在“保存”和“提交”两条链路上的字段要求保持一致。
+      const fieldsToValidate: Array<keyof BusinessHandleFormValues> = ['title'];
+
+      if (businessFormType === 'fish') {
+        fieldsToValidate.push('fishTime');
+      } else if (businessFormType === 'leave') {
+        fieldsToValidate.push('leaveTime');
+      } else if (businessFormType === 'reimbursement') {
+        fieldsToValidate.push(
+          'reimbursementAmount',
+          'reimbursementTime',
+          'reimbursementType',
+        );
+      }
+
+      const validatedValues = await handleForm.validateFields(fieldsToValidate);
+      const submitTitle = validatedValues.title?.trim();
+
+      if (!submitTitle) {
+        message.warning('请输入申请标题');
+        return;
+      }
+
+      const formValues = handleForm.getFieldsValue();
+      const formData = buildDraftFormData(formValues, businessFormType);
+
+      setSubmitting(true);
+
+      const submitResult = editingDraftId
+        ? await (async () => {
+            // 草稿继续办理时，先把当前表单覆盖回草稿，再走运行态 submit。
+            // 这样后端能基于最新草稿内容发起审批，不会把旧表单数据送入流程。
+            const updatedDraft = await updateBizApplyDraft({
+              bizDefinitionId,
+              formData,
+              id: editingDraftId,
+              title: submitTitle,
+            });
+
+            return submitWorkflowBiz({
+              bizApplyId: updatedDraft.id,
+            });
+          })()
+        : await saveAndSubmitBizApply({
+            bizDefinitionId,
+            formData,
+            title: submitTitle,
+          });
+
+      message.success(
+        `提交办理成功${submitResult.workflowInstanceId ? `（流程实例ID：${submitResult.workflowInstanceId}）` : ''}`,
+      );
+      navigate('/workbench/todo', {
+        replace: true,
+      });
+    } catch (error) {
+      if (
+        error &&
+        typeof error === 'object' &&
+        'errorFields' in (error as Record<string, unknown>)
+      ) {
+        return;
+      }
+
+      showErrorMessageOnce(error, '提交办理失败');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <PageContainer
       description="业务办理页按业务类型渲染不同录入项，并继续支持草稿保存与草稿恢复编辑。"
@@ -384,9 +470,8 @@ function BusinessHandlePage() {
                 title: '',
               }}
               layout="vertical"
-              onFinish={(values) => {
-                void values;
-                message.info('业务办理提交接口待接入，当前先保留独立页交互骨架');
+              onFinish={() => {
+                void handleSubmitBusiness();
               }}
             >
               <Row gutter={[16, 0]}>
@@ -559,8 +644,8 @@ function BusinessHandlePage() {
                 >
                   {editingDraftId ? '更新草稿' : '保存草稿'}
                 </Button>
-                <Button htmlType="submit" type="primary">
-                  提交办理
+                <Button htmlType="submit" loading={submitting} type="primary">
+                  {submitting ? '提交中...' : '提交办理'}
                 </Button>
                 <Button onClick={() => navigate(-1)}>返回</Button>
               </Space>

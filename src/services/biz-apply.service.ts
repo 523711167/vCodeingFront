@@ -29,6 +29,8 @@ export interface UpdateBizApplyDraftPayload extends SaveBizApplyDraftPayload {
   id: number;
 }
 
+export interface SaveAndSubmitBizApplyPayload extends SaveBizApplyDraftPayload {}
+
 export interface BizApplyDraftPageQuery {
   pageNum: number;
   pageSize: number;
@@ -130,6 +132,18 @@ export async function updateBizApplyDraft(payload: UpdateBizApplyDraftPayload) {
     data: payload,
     method: 'post',
     url: API_ENDPOINTS.bizApply.updateDraft,
+  });
+}
+
+export async function saveAndSubmitBizApply(payload: SaveAndSubmitBizApplyPayload) {
+  return request<{
+    bizApplyId: number;
+    workflowInstanceId?: number;
+    currentNode?: Record<string, unknown>;
+  }>({
+    data: payload,
+    method: 'post',
+    url: API_ENDPOINTS.bizApply.saveAndSubmit,
   });
 }
 

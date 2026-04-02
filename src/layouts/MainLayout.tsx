@@ -103,6 +103,18 @@ const iconMap: Record<string, ReactNode> = {
   'business-catalog': <BranchesOutlined />,
   'business-process': <DeploymentUnitOutlined />,
   'business-function': <BlockOutlined />,
+  // 日志相关 key 统一收口在这里，
+  // 这样后端菜单一旦开始下发系统日志、登录日志等 icon 标识，左侧菜单可以直接渲染。
+  'log-center': <FileSearchOutlined />,
+  'system-log': <FileTextOutlined />,
+  'login-log': <SafetyCertificateOutlined />,
+  'operation-log': <NotificationOutlined />,
+  'audit-log': <AuditOutlined />,
+  'security-log': <LockOutlined />,
+  'error-log': <AlertOutlined />,
+  'access-log': <ProfileOutlined />,
+  'task-log': <ScheduleOutlined />,
+  'message-log': <MailOutlined />,
   content: <ReadOutlined />,
   database: <DatabaseOutlined />,
   desktop: <DesktopOutlined />,
@@ -111,6 +123,7 @@ const iconMap: Record<string, ReactNode> = {
   form: <FormOutlined />,
   // 菜单 meta.icon 和菜单管理页表单共用同一组 key，
   // 这样后端返回新的 icon 标识后，侧边栏可以直接无转换渲染。
+  'done-box': <CheckCircleOutlined />,
   inbox: <InboxOutlined />,
   lock: <LockOutlined />,
   mail: <MailOutlined />,

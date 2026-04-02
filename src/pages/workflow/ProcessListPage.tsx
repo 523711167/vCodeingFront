@@ -33,6 +33,9 @@ interface SearchFormValues {
 const initialPageQuery: WorkflowDefinitionPageQuery = {
   pageNum: 1,
   pageSize: 10,
+  // 流程列表默认先聚焦“已发布”数据，
+  // 这样用户进入页面时优先看到当前可用流程，而不是草稿和停用流程混在一起。
+  status: 1,
 };
 
 const initialPageData: WorkflowDefinitionPageResult = {
@@ -261,6 +264,9 @@ function ProcessListPage() {
           <Form<SearchFormValues>
             className="management-toolbar__form"
             form={searchForm}
+            initialValues={{
+              status: 1,
+            }}
             layout="inline"
             onFinish={(values) => {
               setQuery((previousQuery) => ({

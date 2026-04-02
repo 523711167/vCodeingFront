@@ -155,6 +155,18 @@ const menuIconMap = {
   'business-catalog': <BranchesOutlined />,
   'business-process': <DeploymentUnitOutlined />,
   'business-function': <BlockOutlined />,
+  // 菜单管理页和左侧导航共用同一组日志 icon key，
+  // 这样配置系统日志、登录日志等菜单时，表单下拉和表格预览可以保持一致。
+  'log-center': <FileSearchOutlined />,
+  'system-log': <FileTextOutlined />,
+  'login-log': <SafetyCertificateOutlined />,
+  'operation-log': <NotificationOutlined />,
+  'audit-log': <AuditOutlined />,
+  'security-log': <LockOutlined />,
+  'error-log': <AlertOutlined />,
+  'access-log': <ProfileOutlined />,
+  'task-log': <ScheduleOutlined />,
+  'message-log': <MailOutlined />,
   database: <DatabaseOutlined />,
   desktop: <DesktopOutlined />,
   deployment: <DeploymentUnitOutlined />,
@@ -162,6 +174,7 @@ const menuIconMap = {
   form: <FormOutlined />,
   // 这组三个业务语义图标给“收件箱 / 代办箱 / 查询箱”复用，
   // 页面预览和菜单实际渲染共用同一组稳定 key，避免保存值和展示值不一致。
+  'done-box': <CheckCircleOutlined />,
   inbox: <InboxOutlined />,
   lock: <LockOutlined />,
   mail: <MailOutlined />,
