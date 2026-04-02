@@ -5,6 +5,7 @@ import { flattenRoutes } from '@/features/permission/filterRoutes';
 import { getDefaultRoutePath } from '@/services/auth.service';
 import MainLayout from '@/layouts/MainLayout';
 import BusinessHandlePage from '@/pages/workbench/BusinessHandlePage';
+import TodoAuditPage from '@/pages/workbench/TodoAuditPage';
 import ProcessDefinitionPage from '@/pages/workflow/ProcessDefinitionPage';
 import { buildBackendRoutes } from '@/router/backend-routes';
 import { publicRoutes } from '@/router/routes';
@@ -93,6 +94,11 @@ function AppRouter() {
             // 办理页保持在主布局内容区中渲染，避免跳出当前后台工作区。
             path: 'workbench/inbox/handle',
             element: <BusinessHandlePage />,
+          },
+          {
+            // 代办审核页同样保持在主布局中，方便用户审核后直接返回代办箱继续处理下一条。
+            path: 'workbench/todo/audit',
+            element: <TodoAuditPage />,
           },
           ...toRouteObjects(allowedBusinessRoutes),
           ...knownModuleFallbacks,

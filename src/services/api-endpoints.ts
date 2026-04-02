@@ -34,6 +34,8 @@ export const API_ENDPOINTS = {
   bizApply: {
     draftDetail: '/sys/biz-apply/draft/detail',
     draftPage: '/sys/biz-apply/draft/page',
+    todoDetail: '/sys/biz-apply/todo/detail',
+    todoPage: '/sys/biz-apply/todo/page',
     // 最新草稿写接口已经收敛到 /draft/save 和 /draft/update。
     // 这里直接切到新版路径，避免前端继续命中兼容中的旧地址。
     saveDraft: '/sys/biz-apply/draft/save',
@@ -62,6 +64,10 @@ export const API_ENDPOINTS = {
     page: '/sys/workflow-definition/page',
     publish: '/sys/workflow-definition/publish',
     update: '/sys/workflow-definition/update',
+  },
+  workflowBiz: {
+    audit: '/sys/workflow-biz/audit',
+    submit: '/sys/workflow-biz/submit',
   },
   dept: {
     create: '/sys/dept/create',

@@ -44,6 +44,41 @@ export interface BizApplyDraftPageResult {
   records: BizApplyDraftRecord[];
 }
 
+export interface WorkflowTodoRecord {
+  approverInstanceId: number;
+  nodeInstanceId: number;
+  workflowInstanceId: number;
+  bizApplyId: number;
+  bizDefinitionId: number;
+  bizName?: string;
+  title?: string;
+  applicantId?: number;
+  applicantName?: string;
+  formData?: string;
+  nodeName?: string;
+  nodeType?: string;
+  approverStatus?: string;
+  approverStatusMsg?: string;
+  startedAt?: string;
+  todoAt?: string;
+}
+
+export interface WorkflowTodoPageQuery {
+  pageNum: number;
+  pageSize: number;
+  bizApplyId?: number;
+  bizDefinitionId?: number;
+  title?: string;
+}
+
+export interface WorkflowTodoPageResult {
+  pageNum: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  records: WorkflowTodoRecord[];
+}
+
 export async function saveBizApplyDraft(payload: SaveBizApplyDraftPayload) {
   return request<BizApplyDraftRecord>({
     data: payload,
@@ -73,5 +108,21 @@ export async function fetchBizApplyDraftDetail(id: number) {
     method: 'get',
     params: { id },
     url: API_ENDPOINTS.bizApply.draftDetail,
+  });
+}
+
+export async function fetchWorkflowTodoPage(query: WorkflowTodoPageQuery) {
+  return request<WorkflowTodoPageResult>({
+    method: 'get',
+    params: query,
+    url: API_ENDPOINTS.bizApply.todoPage,
+  });
+}
+
+export async function fetchWorkflowTodoDetail(approverInstanceId: number) {
+  return request<WorkflowTodoRecord>({
+    method: 'get',
+    params: { approverInstanceId },
+    url: API_ENDPOINTS.bizApply.todoDetail,
   });
 }

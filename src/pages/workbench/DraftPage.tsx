@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ColumnsType } from 'antd/es/table';
-import { Button, Form, Input, Space, Table, Tag } from 'antd';
+import { App as AntdApp, Button, Form, Input, Space, Table, Tag } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import PageContainer from '@/components/PageContainer';
 import {
@@ -11,6 +11,7 @@ import {
 } from '@/services/biz-apply.service';
 import { fetchBizDefinitionList } from '@/services/biz.service';
 import { showErrorMessageOnce } from '@/services/error-message';
+import { submitWorkflowBiz } from '@/services/workflow.service';
 
 interface DraftSearchFormValues {
   title?: string;
@@ -34,11 +35,14 @@ function getDraftStatusColor(status?: string) {
 }
 
 function DraftPage() {
+  const { message } = AntdApp.useApp();
   const navigate = useNavigate();
   const [searchForm] = Form.useForm<DraftSearchFormValues>();
   const [query, setQuery] = useState<BizApplyDraftPageQuery>(initialPageQuery);
   const [pageData, setPageData] = useState<BizApplyDraftPageResult>(initialPageData);
+  const [reloadVersion, setReloadVersion] = useState(0);
   const [tableLoading, setTableLoading] = useState(false);
+  const [submittingDraftId, setSubmittingDraftId] = useState<number | null>(null);
   const [bizNameMap, setBizNameMap] = useState<Record<number, string>>({});
   const [workflowIdMap, setWorkflowIdMap] = useState<Record<number, number | undefined>>({});
 
@@ -109,7 +113,7 @@ function DraftPage() {
     return () => {
       canceled = true;
     };
-  }, [query]);
+  }, [query, reloadVersion]);
 
   const columns = useMemo<ColumnsType<BizApplyDraftRecord>>(
     () => [
@@ -159,25 +163,70 @@ function DraftPage() {
         title: '操作',
         key: 'action',
         fixed: 'right',
-        width: 140,
+        width: 220,
         render: (_, record) => (
-          // 继续编辑时把业务定义 ID 和草稿 ID 一起带到办理页，
-          // 是为了让办理页既能加载业务定义描述，又能回填草稿表单内容。
-          <Button
-            type="link"
-            onClick={() => {
-              navigate(
-                `/workbench/inbox/handle?id=${record.bizDefinitionId}&draftId=${record.id}`,
-              );
-            }}
-          >
-            继续编辑
-          </Button>
+          <Space size={0}>
+            {/* 继续编辑时把业务定义 ID 和草稿 ID 一起带到办理页，
+                是为了让办理页既能加载业务定义描述，又能回填草稿表单内容。 */}
+            <Button
+              type="link"
+              onClick={() => {
+                navigate(
+                  `/workbench/inbox/handle?id=${record.bizDefinitionId}&draftId=${record.id}`,
+                );
+              }}
+            >
+              继续编辑
+            </Button>
+            <Button
+              loading={submittingDraftId === record.id}
+              type="link"
+              onClick={() => {
+                void handleSubmitDraft(record);
+              }}
+            >
+              提交办理
+            </Button>
+          </Space>
         ),
       },
     ],
-    [bizNameMap, navigate, workflowIdMap],
+    [bizNameMap, navigate, submittingDraftId, workflowIdMap],
   );
+
+  function triggerReload(pageNum = query.pageNum) {
+    if (pageNum === query.pageNum) {
+      setReloadVersion((previousVersion) => previousVersion + 1);
+      return;
+    }
+
+    setQuery((previousQuery) => ({
+      ...previousQuery,
+      pageNum,
+    }));
+  }
+
+  async function handleSubmitDraft(record: BizApplyDraftRecord) {
+    try {
+      setSubmittingDraftId(record.id);
+      const submitResult = await submitWorkflowBiz({
+        bizApplyId: record.id,
+      });
+
+      message.success(
+        `提交办理成功${submitResult.workflowInstanceId ? `（流程实例ID：${submitResult.workflowInstanceId}）` : ''}`,
+      );
+      // 草稿提交后通常会脱离草稿箱，所以这里主动刷新列表，
+      // 让用户立刻看到“已提交草稿”从当前页消失，减少重复点击。
+      triggerReload(
+        pageData.records.length === 1 && query.pageNum > 1 ? query.pageNum - 1 : query.pageNum,
+      );
+    } catch (error) {
+      showErrorMessageOnce(error, '提交办理失败');
+    } finally {
+      setSubmittingDraftId(null);
+    }
+  }
 
   function handleSearch(values: DraftSearchFormValues) {
     // 查询条件统一落回分页 query，是为了让搜索和分页共用同一份状态，

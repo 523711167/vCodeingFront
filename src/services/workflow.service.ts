@@ -83,6 +83,24 @@ export interface WorkflowDefinitionIdPayload {
   id: number;
 }
 
+export interface SubmitWorkflowBizPayload {
+  bizApplyId: number;
+}
+
+export interface WorkflowBizSubmitResult {
+  bizApplyId: number;
+  workflowInstanceId?: number;
+  currentNode?: Record<string, unknown>;
+}
+
+export interface AuditWorkflowBizPayload {
+  instanceId: number;
+  nodeInstanceId: number;
+  approverInstanceId: number;
+  action: 'APPROVE' | 'REJECT';
+  comment?: string;
+}
+
 export interface CreateWorkflowDefinitionPayload {
   name: string;
   code: string;
@@ -160,5 +178,25 @@ export async function deleteWorkflowDefinition(payload: WorkflowDefinitionIdPayl
     data: payload,
     method: 'post',
     url: API_ENDPOINTS.workflowDefinition.delete,
+  });
+}
+
+export async function submitWorkflowBiz(payload: SubmitWorkflowBizPayload) {
+  return request<WorkflowBizSubmitResult>({
+    data: payload,
+    method: 'post',
+    // 草稿箱提交办理会直接把现有业务申请草稿送去发起审批，
+    // 所以这里单独补一条运行态 submit 接口，避免和流程定义配置接口混在一起。
+    url: API_ENDPOINTS.workflowBiz.submit,
+  });
+}
+
+export async function auditWorkflowBiz(payload: AuditWorkflowBizPayload) {
+  return request<Record<string, never>>({
+    data: payload,
+    method: 'post',
+    // 审核动作属于流程运行态写接口。
+    // 统一收口在 workflow service，便于后续继续补转交、加签、撤回等运行态动作。
+    url: API_ENDPOINTS.workflowBiz.audit,
   });
 }
