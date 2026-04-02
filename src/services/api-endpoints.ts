@@ -34,6 +34,8 @@ export const API_ENDPOINTS = {
   bizApply: {
     draftDetail: '/sys/biz-apply/draft/detail',
     draftPage: '/sys/biz-apply/draft/page',
+    queryDetail: '/sys/biz-apply/query/detail',
+    queryPage: '/sys/biz-apply/query/page',
     todoDetail: '/sys/biz-apply/todo/detail',
     todoPage: '/sys/biz-apply/todo/page',
     // 最新草稿写接口已经收敛到 /draft/save 和 /draft/update。
