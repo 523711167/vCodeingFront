@@ -1,32 +1,153 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import dayjs, { type Dayjs } from 'dayjs';
 import {
   Alert,
   App as AntdApp,
   Button,
   Card,
   Col,
+  DatePicker,
   Descriptions,
   Empty,
   Form,
   Input,
-  InputNumber,
   Row,
+  Select,
   Space,
   Spin,
 } from 'antd';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageContainer from '@/components/PageContainer';
 import {
+  fetchBizApplyDraftDetail,
+  saveBizApplyDraft,
+  updateBizApplyDraft,
+} from '@/services/biz-apply.service';
+import {
   fetchBizDefinitionDetail,
   type BizDefinitionRecord,
 } from '@/services/biz.service';
-import { saveBizApplyDraft } from '@/services/biz-apply.service';
 import { showErrorMessageOnce } from '@/services/error-message';
 
-interface BusinessHandleFormValues {
+type BusinessFormType = 'fish' | 'leave' | 'reimbursement' | 'unknown';
+
+interface DraftFormData {
+  fishTime?: string;
+  leaveTime?: string;
   reimbursementAmount?: number;
+  reimbursementTime?: string;
+  reimbursementType?: string;
+  remark?: string;
+}
+
+interface BusinessHandleFormValues {
+  fishTime?: Dayjs;
+  leaveTime?: Dayjs;
+  reimbursementAmount?: number;
+  reimbursementTime?: Dayjs;
+  reimbursementType?: string;
   remark?: string;
   title?: string;
+}
+
+const reimbursementTypeOptions = [
+  { label: '差旅报销', value: 'TRAVEL' },
+  { label: '餐饮报销', value: 'MEAL' },
+  { label: '办公报销', value: 'OFFICE' },
+  { label: '其他报销', value: 'OTHER' },
+];
+
+function detectBusinessFormType(detailRecord: BizDefinitionRecord | null): BusinessFormType {
+  const normalizedText = `${detailRecord?.bizName ?? ''} ${detailRecord?.bizCode ?? ''}`.toLowerCase();
+
+  // 办理页目前只存在三种固定业务类型。
+  // 这里同时兼容业务名称和业务编码做识别，避免后端配置一端写中文、一端写英文时前端失配。
+  if (normalizedText.includes('摸鱼') || normalizedText.includes('fish')) {
+    return 'fish';
+  }
+
+  if (normalizedText.includes('请假') || normalizedText.includes('leave')) {
+    return 'leave';
+  }
+
+  if (
+    normalizedText.includes('报销') ||
+    normalizedText.includes('reimbursement') ||
+    normalizedText.includes('expense')
+  ) {
+    return 'reimbursement';
+  }
+
+  return 'unknown';
+}
+
+function parseDraftDate(value?: string) {
+  if (!value) {
+    return undefined;
+  }
+
+  const parsedDate = dayjs(value);
+
+  return parsedDate.isValid() ? parsedDate : undefined;
+}
+
+function parseDraftFormData(formData?: string): DraftFormData {
+  if (!formData) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(formData) as DraftFormData;
+
+    return {
+      fishTime: typeof parsed.fishTime === 'string' ? parsed.fishTime : undefined,
+      leaveTime: typeof parsed.leaveTime === 'string' ? parsed.leaveTime : undefined,
+      reimbursementAmount:
+        typeof parsed.reimbursementAmount === 'number'
+          ? parsed.reimbursementAmount
+          : undefined,
+      reimbursementTime:
+        typeof parsed.reimbursementTime === 'string' ? parsed.reimbursementTime : undefined,
+      reimbursementType:
+        typeof parsed.reimbursementType === 'string' ? parsed.reimbursementType : undefined,
+      remark: typeof parsed.remark === 'string' ? parsed.remark : '',
+    };
+  } catch {
+    return {};
+  }
+}
+
+function buildDraftFormData(values: BusinessHandleFormValues, formType: BusinessFormType) {
+  // 草稿序列化要跟着业务类型一起切换，
+  // 这样草稿回填时只会还原当前业务真正需要的字段，不会把别的业务字段残留进来。
+  const baseData = {
+    remark: values.remark?.trim() || '',
+  };
+
+  if (formType === 'fish') {
+    return JSON.stringify({
+      ...baseData,
+      fishTime: values.fishTime?.format('YYYY-MM-DD HH:mm:ss') || '',
+    });
+  }
+
+  if (formType === 'leave') {
+    return JSON.stringify({
+      ...baseData,
+      leaveTime: values.leaveTime?.format('YYYY-MM-DD HH:mm:ss') || '',
+    });
+  }
+
+  if (formType === 'reimbursement') {
+    return JSON.stringify({
+      ...baseData,
+      reimbursementAmount: values.reimbursementAmount,
+      reimbursementTime: values.reimbursementTime?.format('YYYY-MM-DD HH:mm:ss') || '',
+      reimbursementType: values.reimbursementType || '',
+    });
+  }
+
+  return JSON.stringify(baseData);
 }
 
 function BusinessHandlePage() {
@@ -37,32 +158,74 @@ function BusinessHandlePage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [draftSaving, setDraftSaving] = useState(false);
   const [detailRecord, setDetailRecord] = useState<BizDefinitionRecord | null>(null);
+  const [editingDraftId, setEditingDraftId] = useState<number | null>(null);
   const rawBizDefinitionId = Number(searchParams.get('id') ?? '');
+  const rawDraftId = Number(searchParams.get('draftId') ?? '');
   const bizDefinitionId =
     Number.isFinite(rawBizDefinitionId) && rawBizDefinitionId > 0
       ? rawBizDefinitionId
       : null;
+  const draftId = Number.isFinite(rawDraftId) && rawDraftId > 0 ? rawDraftId : null;
+  const businessFormType = useMemo(
+    () => detectBusinessFormType(detailRecord),
+    [detailRecord],
+  );
 
   useEffect(() => {
     if (!bizDefinitionId) {
       setDetailRecord(null);
+      setEditingDraftId(null);
       return;
     }
 
     const currentBizDefinitionId = bizDefinitionId;
+    const currentDraftId = draftId;
 
     let cancelled = false;
 
     async function run() {
       try {
         setDetailLoading(true);
-        const detail = await fetchBizDefinitionDetail(currentBizDefinitionId);
+        // 草稿编辑场景要把“业务定义描述”和“草稿内容”一起拉回来，
+        // 这样进入页面后就能一次性完成头部信息展示和表单回填。
+        const [detail, draftDetail] = await Promise.all([
+          fetchBizDefinitionDetail(currentBizDefinitionId),
+          currentDraftId ? fetchBizApplyDraftDetail(currentDraftId) : Promise.resolve(null),
+        ]);
 
         if (!cancelled) {
           setDetailRecord(detail);
-          // 申请标题优先给一个可编辑默认值，减少用户第一次保存草稿时的输入成本。
-          // 后续如果后端有“标题模板”或“编号规则”，优先在这里替换默认值生成逻辑。
-          handleForm.setFieldValue('title', `${detail.bizName}申请`);
+          setEditingDraftId(draftDetail?.id ?? null);
+          const currentFormType = detectBusinessFormType(detail);
+          const parsedDraftFormData = parseDraftFormData(draftDetail?.formData);
+
+          // 每次业务类型变化都显式重置整张表单，
+          // 避免用户从一种业务切到另一种业务时，旧字段值还残留在表单状态里。
+          handleForm.resetFields();
+          handleForm.setFieldsValue({
+            fishTime:
+              currentFormType === 'fish' && parsedDraftFormData.fishTime
+                ? parseDraftDate(parsedDraftFormData.fishTime)
+                : undefined,
+            leaveTime:
+              currentFormType === 'leave' && parsedDraftFormData.leaveTime
+                ? parseDraftDate(parsedDraftFormData.leaveTime)
+                : undefined,
+            reimbursementTime:
+              currentFormType === 'reimbursement' && parsedDraftFormData.reimbursementTime
+                ? parseDraftDate(parsedDraftFormData.reimbursementTime)
+                : undefined,
+            reimbursementAmount:
+              currentFormType === 'reimbursement'
+                ? parsedDraftFormData.reimbursementAmount
+                : undefined,
+            reimbursementType:
+              currentFormType === 'reimbursement'
+                ? parsedDraftFormData.reimbursementType
+                : undefined,
+            remark: parsedDraftFormData.remark ?? '',
+            title: draftDetail?.title || `${detail.bizName}申请`,
+          });
         }
       } catch (error) {
         if (!cancelled) {
@@ -80,7 +243,7 @@ function BusinessHandlePage() {
     return () => {
       cancelled = true;
     };
-  }, [bizDefinitionId]);
+  }, [bizDefinitionId, draftId, handleForm]);
 
   async function handleSaveDraft() {
     if (!bizDefinitionId) {
@@ -88,11 +251,30 @@ function BusinessHandlePage() {
       return;
     }
 
+    if (businessFormType === 'unknown') {
+      message.warning('当前业务类型暂未配置办理表单，请联系管理员确认业务定义');
+      return;
+    }
+
     try {
-      // 草稿保存至少要求申请标题可用；
-      // 其他业务字段允许先保存未完成状态，方便用户中途退出后继续编辑。
-      const { title } = await handleForm.validateFields(['title']);
-      const draftTitle = title?.trim();
+      // 保存草稿时要先校验“标题 + 当前业务类型的必填字段”，
+      // 这样不同业务的录入规则能保持独立，不会互相干扰。
+      const fieldsToValidate: Array<keyof BusinessHandleFormValues> = ['title'];
+
+      if (businessFormType === 'fish') {
+        fieldsToValidate.push('fishTime');
+      } else if (businessFormType === 'leave') {
+        fieldsToValidate.push('leaveTime');
+      } else if (businessFormType === 'reimbursement') {
+        fieldsToValidate.push(
+          'reimbursementAmount',
+          'reimbursementTime',
+          'reimbursementType',
+        );
+      }
+
+      const validatedValues = await handleForm.validateFields(fieldsToValidate);
+      const draftTitle = validatedValues.title?.trim();
 
       if (!draftTitle) {
         message.warning('请输入申请标题');
@@ -102,16 +284,32 @@ function BusinessHandlePage() {
       const formValues = handleForm.getFieldsValue();
 
       setDraftSaving(true);
-      const savedDraft = await saveBizApplyDraft({
-        bizDefinitionId,
-        formData: JSON.stringify({
-          reimbursementAmount: formValues.reimbursementAmount,
-          remark: formValues.remark?.trim() || '',
-        }),
-        title: draftTitle,
-      });
+      const savedDraft = editingDraftId
+        ? await updateBizApplyDraft({
+            bizDefinitionId,
+            formData: buildDraftFormData(formValues, businessFormType),
+            id: editingDraftId,
+            title: draftTitle,
+          })
+        : await saveBizApplyDraft({
+            bizDefinitionId,
+            formData: buildDraftFormData(formValues, businessFormType),
+            title: draftTitle,
+          });
 
-      message.success(`草稿保存成功${savedDraft.id ? `（草稿ID：${savedDraft.id}）` : ''}`);
+      setEditingDraftId(savedDraft.id ?? editingDraftId);
+
+      // 新增草稿后立刻补全 draftId 到地址栏，
+      // 是为了让用户刷新页面、复制链接或从草稿箱返回时都能继续命中编辑链路。
+      if (!editingDraftId && savedDraft.id) {
+        navigate(`/workbench/inbox/handle?id=${bizDefinitionId}&draftId=${savedDraft.id}`, {
+          replace: true,
+        });
+      }
+
+      message.success(
+        `${editingDraftId ? '草稿更新' : '草稿保存'}成功${savedDraft.id ? `（草稿ID：${savedDraft.id}）` : ''}`,
+      );
     } catch (error) {
       if (
         error &&
@@ -121,7 +319,7 @@ function BusinessHandlePage() {
         return;
       }
 
-      showErrorMessageOnce(error, '草稿保存失败');
+      showErrorMessageOnce(error, editingDraftId ? '草稿更新失败' : '草稿保存失败');
     } finally {
       setDraftSaving(false);
     }
@@ -129,7 +327,7 @@ function BusinessHandlePage() {
 
   return (
     <PageContainer
-      description="业务办理页改成独立页承载，便于后续接入复杂表单、附件、审批意见和流程轨迹。"
+      description="业务办理页按业务类型渲染不同录入项，并继续支持草稿保存与草稿恢复编辑。"
       title="业务办理"
     >
       {!bizDefinitionId && (
@@ -176,13 +374,13 @@ function BusinessHandlePage() {
           </Card>
 
           <Card title="业务表单">
-            {/* 这里先把“独立页录入”的交互骨架搭起来，
-                后续真实业务表单接口出来后，优先在当前 Form 区域替换成动态表单渲染，不要再退回列表弹窗模式。 */}
+            {/* 办理页目前只有三种固定业务。
+                所以这里先采用前端分支渲染，而不是引入更重的动态表单方案，降低当前联调复杂度。 */}
             <Form<BusinessHandleFormValues>
               form={handleForm}
               initialValues={{
-                reimbursementAmount: undefined,
                 remark: '',
+                reimbursementType: undefined,
                 title: '',
               }}
               layout="vertical"
@@ -191,10 +389,8 @@ function BusinessHandlePage() {
                 message.info('业务办理提交接口待接入，当前先保留独立页交互骨架');
               }}
             >
-              {/* 标题和金额放在同一行，是为了让业务办理页首屏先展示最核心的两个录入字段，
-                  用户进入页面后可以更快完成主操作；字段继续增加时再往下一行扩展。 */}
               <Row gutter={[16, 0]}>
-                <Col span={12}>
+                <Col md={8} span={24}>
                   <Form.Item
                     extra="草稿保存接口要求传申请标题，所以这里先作为业务办理页的基础字段。"
                     label="申请标题"
@@ -209,37 +405,151 @@ function BusinessHandlePage() {
                     <Input placeholder="请输入申请标题" />
                   </Form.Item>
                 </Col>
-                <Col span={12}>
-                  <Form.Item
-                    extra="这里先按报销场景补一个金额字段，后续如果后端返回动态表单配置，可以继续替换成真实业务字段。"
-                    label="报销金额"
-                    name="reimbursementAmount"
-                    rules={[
-                      {
-                        required: true,
-                        message: '请输入报销金额',
-                      },
-                    ]}
-                  >
-                    <InputNumber
-                      min={0}
-                      placeholder="请输入报销金额"
-                      precision={2}
-                      style={{ width: '100%' }}
-                    />
-                  </Form.Item>
-                </Col>
+
+                {businessFormType === 'fish' && (
+                  <>
+                    <Col md={8} span={24}>
+                      <Form.Item
+                        extra="客户摸鱼业务只需要记录一次摸鱼时间，后续如果要改成时间段，可以从这个字段扩展成开始/结束时间。"
+                        label="摸鱼时间"
+                        name="fishTime"
+                        rules={[
+                          {
+                            required: true,
+                            message: '请选择摸鱼时间',
+                          },
+                        ]}
+                      >
+                        <DatePicker
+                          placeholder="请选择摸鱼时间"
+                          showTime
+                          style={{ width: '100%' }}
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col md={8} span={24}>
+                      <Form.Item
+                        extra="摸鱼业务先把备注收进首行，方便一屏内完成三项录入；如果后续备注明显变长，再从这里恢复成多行输入。"
+                        label="办理备注"
+                        name="remark"
+                      >
+                        <Input placeholder="请输入当前业务的补充说明" />
+                      </Form.Item>
+                    </Col>
+                  </>
+                )}
+
+                {businessFormType === 'leave' && (
+                  <>
+                    <Col md={8} span={24}>
+                      <Form.Item
+                        extra="客户请假业务当前只记录请假时间，后续如果需要补请假天数或请假类型，优先在这一组表单内继续扩展。"
+                        label="请假时间"
+                        name="leaveTime"
+                        rules={[
+                          {
+                            required: true,
+                            message: '请选择请假时间',
+                          },
+                        ]}
+                      >
+                        <DatePicker
+                          placeholder="请选择请假时间"
+                          showTime
+                          style={{ width: '100%' }}
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col md={8} span={24}>
+                      <Form.Item
+                        extra="请假业务先共用一格短备注，保证首行能容纳三项录入；后续若要补长文本说明，可继续拆成独立多行备注区。"
+                        label="办理备注"
+                        name="remark"
+                      >
+                        <Input placeholder="请输入当前业务的补充说明" />
+                      </Form.Item>
+                    </Col>
+                  </>
+                )}
+
+                {businessFormType === 'reimbursement' && (
+                  <>
+                    <Col md={8} span={24}>
+                      <Form.Item
+                        extra="报销金额和报销时间、报销类型一起放在首行，是为了让报销业务最关键的三项信息可以一次录完。"
+                        label="报销金额"
+                        name="reimbursementAmount"
+                        rules={[
+                          {
+                            required: true,
+                            message: '请输入报销金额',
+                          },
+                        ]}
+                      >
+                        <Input placeholder="请输入报销金额" />
+                      </Form.Item>
+                    </Col>
+                    <Col md={8} span={24}>
+                      <Form.Item
+                        extra="客户报销必须同时记录报销时间和报销类型，这样后续提交审批时可以直接带上必要业务信息。"
+                        label="报销时间"
+                        name="reimbursementTime"
+                        rules={[
+                          {
+                            required: true,
+                            message: '请选择报销时间',
+                          },
+                        ]}
+                      >
+                        <DatePicker
+                          placeholder="请选择报销时间"
+                          showTime
+                          style={{ width: '100%' }}
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col md={8} span={24}>
+                      <Form.Item
+                        extra="报销类型先收敛成固定枚举，便于后续审批规则按类型做分流；如果后台有字典接口，再从这里切换成远程选项。"
+                        label="报销类型"
+                        name="reimbursementType"
+                        rules={[
+                          {
+                            required: true,
+                            message: '请选择报销类型',
+                          },
+                        ]}
+                      >
+                        <Select options={reimbursementTypeOptions} placeholder="请选择报销类型" />
+                      </Form.Item>
+                    </Col>
+                  </>
+                )}
               </Row>
-              <Form.Item
-                extra="当前先预留一块录入区域，后续接真实表单接口后会替换成动态字段。"
-                label="办理备注"
-                name="remark"
-              >
-                <Input.TextArea
-                  placeholder="请输入当前业务的办理内容或补充说明"
-                  rows={8}
+
+              {businessFormType === 'unknown' && (
+                <Alert
+                  message="当前业务定义未匹配到办理表单"
+                  description="目前办理页仅支持客户摸鱼、客户请假、客户报销三种业务类型，请检查业务名称或业务编码配置。"
+                  showIcon
+                  style={{ marginBottom: 16 }}
+                  type="warning"
                 />
-              </Form.Item>
+              )}
+
+              {businessFormType === 'reimbursement' && (
+                <Row gutter={[16, 0]}>
+                  <Col md={8} span={24}>
+                    <Form.Item
+                      extra="报销业务把备注放到下一行继续沿用三列布局，方便后续在同一行追加金额、票据编号等字段。"
+                      label="办理备注"
+                      name="remark"
+                    >
+                      <Input placeholder="请输入当前业务的补充说明" />
+                    </Form.Item>
+                  </Col>
+                </Row>
+              )}
               <Space>
                 <Button
                   loading={draftSaving}
@@ -247,7 +557,7 @@ function BusinessHandlePage() {
                     void handleSaveDraft();
                   }}
                 >
-                  保存草稿
+                  {editingDraftId ? '更新草稿' : '保存草稿'}
                 </Button>
                 <Button htmlType="submit" type="primary">
                   提交办理

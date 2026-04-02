@@ -11,6 +11,11 @@ export interface BizApplyDraftRecord {
   applicantId?: number;
   applicantName?: string;
   deptId?: number;
+  // OpenAPI 当前 schema 没显式写出 formData / 更新时间，
+  // 但草稿继续编辑场景需要读取这些字段，所以这里先按联调需求声明成可选。
+  // 如果后端后续补全文档，这里继续和文档字段保持一致即可。
+  formData?: string;
+  updatedAt?: string;
   workflowName?: string;
 }
 
@@ -20,10 +25,53 @@ export interface SaveBizApplyDraftPayload {
   formData: string;
 }
 
+export interface UpdateBizApplyDraftPayload extends SaveBizApplyDraftPayload {
+  id: number;
+}
+
+export interface BizApplyDraftPageQuery {
+  pageNum: number;
+  pageSize: number;
+  bizDefinitionId?: number;
+  title?: string;
+}
+
+export interface BizApplyDraftPageResult {
+  pageNum: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  records: BizApplyDraftRecord[];
+}
+
 export async function saveBizApplyDraft(payload: SaveBizApplyDraftPayload) {
   return request<BizApplyDraftRecord>({
     data: payload,
     method: 'post',
     url: API_ENDPOINTS.bizApply.saveDraft,
+  });
+}
+
+export async function updateBizApplyDraft(payload: UpdateBizApplyDraftPayload) {
+  return request<BizApplyDraftRecord>({
+    data: payload,
+    method: 'post',
+    url: API_ENDPOINTS.bizApply.updateDraft,
+  });
+}
+
+export async function fetchBizApplyDraftPage(query: BizApplyDraftPageQuery) {
+  return request<BizApplyDraftPageResult>({
+    method: 'get',
+    params: query,
+    url: API_ENDPOINTS.bizApply.draftPage,
+  });
+}
+
+export async function fetchBizApplyDraftDetail(id: number) {
+  return request<BizApplyDraftRecord>({
+    method: 'get',
+    params: { id },
+    url: API_ENDPOINTS.bizApply.draftDetail,
   });
 }

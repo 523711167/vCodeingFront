@@ -32,7 +32,12 @@ export const API_ENDPOINTS = {
   // bizApply 域承接“业务办理/草稿/提交审批”这类运行态接口。
   // 这样可以和业务定义配置接口拆开，避免页面在 import 时把配置态和运行态混成一组。
   bizApply: {
-    saveDraft: '/sys/biz-apply/save',
+    draftDetail: '/sys/biz-apply/draft/detail',
+    draftPage: '/sys/biz-apply/draft/page',
+    // 最新草稿写接口已经收敛到 /draft/save 和 /draft/update。
+    // 这里直接切到新版路径，避免前端继续命中兼容中的旧地址。
+    saveDraft: '/sys/biz-apply/draft/save',
+    updateDraft: '/sys/biz-apply/draft/update',
   },
   dashboard: {
     overview: '/dashboard/overview',
