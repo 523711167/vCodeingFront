@@ -11,6 +11,7 @@ import {
   Empty,
   Form,
   Input,
+  InputNumber,
   Row,
   Select,
   Space,
@@ -474,94 +475,115 @@ function BusinessHandlePage() {
                 void handleSubmitBusiness();
               }}
             >
-              <Row gutter={[16, 0]}>
-                <Col md={8} span={24}>
-                  <Form.Item
-                    extra="草稿保存接口要求传申请标题，所以这里先作为业务办理页的基础字段。"
-                    label="申请标题"
-                    name="title"
-                    rules={[
-                      {
-                        required: true,
-                        message: '请输入申请标题',
-                      },
-                    ]}
-                  >
-                    <Input placeholder="请输入申请标题" />
-                  </Form.Item>
-                </Col>
+              {businessFormType !== 'reimbursement' && (
+                <Row gutter={[16, 0]}>
+                  <Col md={8} span={24}>
+                    <Form.Item
+                      extra="草稿保存接口要求传申请标题，所以这里先作为业务办理页的基础字段。"
+                      label="申请标题"
+                      name="title"
+                      rules={[
+                        {
+                          required: true,
+                          message: '请输入申请标题',
+                        },
+                      ]}
+                    >
+                      <Input placeholder="请输入申请标题" />
+                    </Form.Item>
+                  </Col>
 
-                {businessFormType === 'fish' && (
-                  <>
+                  {businessFormType === 'fish' && (
+                    <>
+                      <Col md={8} span={24}>
+                        <Form.Item
+                          extra="客户摸鱼业务只需要记录一次摸鱼时间，后续如果要改成时间段，可以从这个字段扩展成开始/结束时间。"
+                          label="摸鱼时间"
+                          name="fishTime"
+                          rules={[
+                            {
+                              required: true,
+                              message: '请选择摸鱼时间',
+                            },
+                          ]}
+                        >
+                          <DatePicker
+                            placeholder="请选择摸鱼时间"
+                            showTime
+                            style={{ width: '100%' }}
+                          />
+                        </Form.Item>
+                      </Col>
+                      <Col md={8} span={24}>
+                        <Form.Item
+                          extra="摸鱼业务先把备注收进首行，方便一屏内完成三项录入；如果后续备注明显变长，再从这里恢复成多行输入。"
+                          label="办理备注"
+                          name="remark"
+                        >
+                          <Input placeholder="请输入当前业务的补充说明" />
+                        </Form.Item>
+                      </Col>
+                    </>
+                  )}
+
+                  {businessFormType === 'leave' && (
+                    <>
+                      <Col md={8} span={24}>
+                        <Form.Item
+                          extra="客户请假业务当前只记录请假时间，后续如果需要补请假天数或请假类型，优先在这一组表单内继续扩展。"
+                          label="请假时间"
+                          name="leaveTime"
+                          rules={[
+                            {
+                              required: true,
+                              message: '请选择请假时间',
+                            },
+                          ]}
+                        >
+                          <DatePicker
+                            placeholder="请选择请假时间"
+                            showTime
+                            style={{ width: '100%' }}
+                          />
+                        </Form.Item>
+                      </Col>
+                      <Col md={8} span={24}>
+                        <Form.Item
+                          extra="请假业务先共用一格短备注，保证首行能容纳三项录入；后续若要补长文本说明，可继续拆成独立多行备注区。"
+                          label="办理备注"
+                          name="remark"
+                        >
+                          <Input placeholder="请输入当前业务的补充说明" />
+                        </Form.Item>
+                      </Col>
+                    </>
+                  )}
+                </Row>
+              )}
+
+              {businessFormType === 'reimbursement' && (
+                <Space direction="vertical" size={0} style={{ width: '100%' }}>
+                  {/* 报销场景把字段拆成“两行主次分明”的布局，
+                      是为了让标题、金额、类型先形成一组决策信息，再往下填写时间和备注。 */}
+                  <Row gutter={[16, 0]}>
                     <Col md={8} span={24}>
                       <Form.Item
-                        extra="客户摸鱼业务只需要记录一次摸鱼时间，后续如果要改成时间段，可以从这个字段扩展成开始/结束时间。"
-                        label="摸鱼时间"
-                        name="fishTime"
+                        extra="申请标题保留在首行，方便用户在填写金额和类型前先明确本次报销单的主题。"
+                        label="申请标题"
+                        name="title"
                         rules={[
                           {
                             required: true,
-                            message: '请选择摸鱼时间',
+                            message: '请输入申请标题',
                           },
                         ]}
                       >
-                        <DatePicker
-                          placeholder="请选择摸鱼时间"
-                          showTime
-                          style={{ width: '100%' }}
-                        />
+                        <Input placeholder="请输入申请标题" />
                       </Form.Item>
                     </Col>
                     <Col md={8} span={24}>
                       <Form.Item
-                        extra="摸鱼业务先把备注收进首行，方便一屏内完成三项录入；如果后续备注明显变长，再从这里恢复成多行输入。"
-                        label="办理备注"
-                        name="remark"
-                      >
-                        <Input placeholder="请输入当前业务的补充说明" />
-                      </Form.Item>
-                    </Col>
-                  </>
-                )}
-
-                {businessFormType === 'leave' && (
-                  <>
-                    <Col md={8} span={24}>
-                      <Form.Item
-                        extra="客户请假业务当前只记录请假时间，后续如果需要补请假天数或请假类型，优先在这一组表单内继续扩展。"
-                        label="请假时间"
-                        name="leaveTime"
-                        rules={[
-                          {
-                            required: true,
-                            message: '请选择请假时间',
-                          },
-                        ]}
-                      >
-                        <DatePicker
-                          placeholder="请选择请假时间"
-                          showTime
-                          style={{ width: '100%' }}
-                        />
-                      </Form.Item>
-                    </Col>
-                    <Col md={8} span={24}>
-                      <Form.Item
-                        extra="请假业务先共用一格短备注，保证首行能容纳三项录入；后续若要补长文本说明，可继续拆成独立多行备注区。"
-                        label="办理备注"
-                        name="remark"
-                      >
-                        <Input placeholder="请输入当前业务的补充说明" />
-                      </Form.Item>
-                    </Col>
-                  </>
-                )}
-
-                {businessFormType === 'reimbursement' && (
-                  <>
-                    <Col md={8} span={24}>
-                      <Form.Item
-                        extra="报销金额和报销时间、报销类型一起放在首行，是为了让报销业务最关键的三项信息可以一次录完。"
+                        extra="报销金额使用数字输入组件，是为了减少金额格式错误并保留后续扩展币种、税额的空间。"
                         label="报销金额"
                         name="reimbursementAmount"
                         rules={[
@@ -571,12 +593,36 @@ function BusinessHandlePage() {
                           },
                         ]}
                       >
-                        <Input placeholder="请输入报销金额" />
+                        <InputNumber
+                          min={0}
+                          placeholder="请输入报销金额"
+                          precision={2}
+                          prefix="¥"
+                          style={{ width: '100%' }}
+                        />
                       </Form.Item>
                     </Col>
                     <Col md={8} span={24}>
                       <Form.Item
-                        extra="客户报销必须同时记录报销时间和报销类型，这样后续提交审批时可以直接带上必要业务信息。"
+                        extra="报销类型放在首行末位，用户录完标题和金额后可以顺手完成分类。"
+                        label="报销类型"
+                        name="reimbursementType"
+                        rules={[
+                          {
+                            required: true,
+                            message: '请选择报销类型',
+                          },
+                        ]}
+                      >
+                        <Select options={reimbursementTypeOptions} placeholder="请选择报销类型" />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+
+                  <Row gutter={[16, 0]}>
+                    <Col md={8} span={24}>
+                      <Form.Item
+                        extra="报销时间单独放到第二行开头，是为了让时间信息和上面的金额、类型形成更清晰的阅读分组。"
                         label="报销时间"
                         name="reimbursementTime"
                         rules={[
@@ -593,24 +639,21 @@ function BusinessHandlePage() {
                         />
                       </Form.Item>
                     </Col>
-                    <Col md={8} span={24}>
+                    <Col md={16} span={24}>
                       <Form.Item
-                        extra="报销类型先收敛成固定枚举，便于后续审批规则按类型做分流；如果后台有字典接口，再从这里切换成远程选项。"
-                        label="报销类型"
-                        name="reimbursementType"
-                        rules={[
-                          {
-                            required: true,
-                            message: '请选择报销类型',
-                          },
-                        ]}
+                        extra="备注区拉宽到两列宽度，是为了让报销说明、票据摘要等内容输入时不容易被横向挤压。"
+                        label="办理备注"
+                        name="remark"
                       >
-                        <Select options={reimbursementTypeOptions} placeholder="请选择报销类型" />
+                        <Input.TextArea
+                          placeholder="请输入当前业务的补充说明"
+                          rows={4}
+                        />
                       </Form.Item>
                     </Col>
-                  </>
-                )}
-              </Row>
+                  </Row>
+                </Space>
+              )}
 
               {businessFormType === 'unknown' && (
                 <Alert
@@ -622,19 +665,6 @@ function BusinessHandlePage() {
                 />
               )}
 
-              {businessFormType === 'reimbursement' && (
-                <Row gutter={[16, 0]}>
-                  <Col md={8} span={24}>
-                    <Form.Item
-                      extra="报销业务把备注放到下一行继续沿用三列布局，方便后续在同一行追加金额、票据编号等字段。"
-                      label="办理备注"
-                      name="remark"
-                    >
-                      <Input placeholder="请输入当前业务的补充说明" />
-                    </Form.Item>
-                  </Col>
-                </Row>
-              )}
               <Space>
                 <Button
                   loading={draftSaving}

@@ -156,6 +156,12 @@ function QueryPage() {
         render: (value: string | undefined) => value || '-',
       },
       {
+        title: '结束时间',
+        dataIndex: 'finishedAt',
+        width: 180,
+        render: (value: string | undefined) => value || '-',
+      },
+      {
         title: '操作',
         key: 'action',
         fixed: 'right',
