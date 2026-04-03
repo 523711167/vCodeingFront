@@ -12,6 +12,7 @@ import {
   Tag,
 } from 'antd';
 import PageContainer from '@/components/PageContainer';
+import WorkflowTraceTimeline from '@/components/workflow/WorkflowTraceTimeline';
 import {
   fetchWorkflowQueryDetail,
   fetchWorkflowQueryPage,
@@ -266,7 +267,9 @@ function QueryPage() {
           },
         }}
         rowKey="bizApplyId"
-        scroll={{ x: 1500 }}
+        // 查询箱和“我的发起”保持一致：主列表最多展示 10 行可视高度，
+        // 超出部分交给表格内部滚动，避免工作台页整体被表格拉得过长。
+        scroll={{ x: 1500, y: 10 * 54 }}
         style={{ marginTop: 16 }}
       />
 
@@ -281,71 +284,89 @@ function QueryPage() {
         title="查询详情"
         width={720}
       >
-        <Descriptions
-          column={2}
-          items={[
-            {
-              key: 'bizApplyId',
-              label: '业务申请ID',
-              children: detailRecord?.bizApplyId ?? '-',
-            },
-            {
-              key: 'bizName',
-              label: '业务名称',
-              children: detailRecord?.bizName || '-',
-            },
-            {
-              key: 'title',
-              label: '申请标题',
-              children: detailRecord?.title || '-',
-            },
-            {
-              key: 'applicantName',
-              label: '申请人',
-              children: detailRecord?.applicantName || '-',
-            },
-            {
-              key: 'bizStatusMsg',
-              label: '业务状态',
-              children: detailRecord?.bizStatusMsg || detailRecord?.bizStatus || '-',
-            },
-            {
-              key: 'workflowStatusMsg',
-              label: '流程状态',
-              children: detailRecord?.workflowStatusMsg || detailRecord?.workflowStatus || '-',
-            },
-            {
-              key: 'currentNodeName',
-              label: '当前节点',
-              children: detailRecord?.currentNodeName || '-',
-            },
-            {
-              key: 'workflowInstanceId',
-              label: '流程实例ID',
-              children: detailRecord?.workflowInstanceId ?? '-',
-            },
-            {
-              key: 'submittedAt',
-              label: '提交流程时间',
-              children: detailRecord?.submittedAt || '-',
-            },
-            {
-              key: 'finishedAt',
-              label: '流程结束时间',
-              children: detailRecord?.finishedAt || '-',
-            },
-            {
-              key: 'updatedAt',
-              label: '最近更新时间',
-              children: detailRecord?.updatedAt || '-',
-            },
-            {
-              key: 'formData',
-              label: '表单数据',
-              children: detailRecord?.formData || '-',
-            },
-          ]}
-        />
+        <Space direction="vertical" size={16} style={{ width: '100%' }}>
+          <Descriptions
+            column={2}
+            items={[
+              {
+                key: 'bizApplyId',
+                label: '业务申请ID',
+                children: detailRecord?.bizApplyId ?? '-',
+              },
+              {
+                key: 'bizName',
+                label: '业务名称',
+                children: detailRecord?.bizName || '-',
+              },
+              {
+                key: 'title',
+                label: '申请标题',
+                children: detailRecord?.title || '-',
+              },
+              {
+                key: 'applicantName',
+                label: '申请人',
+                children: detailRecord?.applicantName || '-',
+              },
+              {
+                key: 'bizStatusMsg',
+                label: '业务状态',
+                children: detailRecord?.bizStatusMsg || detailRecord?.bizStatus || '-',
+              },
+              {
+                key: 'workflowStatusMsg',
+                label: '流程状态',
+                children: detailRecord?.workflowStatusMsg || detailRecord?.workflowStatus || '-',
+              },
+              {
+                key: 'currentNodeName',
+                label: '当前节点',
+                children: detailRecord?.currentNodeName || '-',
+              },
+              {
+                key: 'workflowInstanceId',
+                label: '流程实例ID',
+                children: detailRecord?.workflowInstanceId ?? '-',
+              },
+              {
+                key: 'submittedAt',
+                label: '提交流程时间',
+                children: detailRecord?.submittedAt || '-',
+              },
+              {
+                key: 'finishedAt',
+                label: '流程结束时间',
+                children: detailRecord?.finishedAt || '-',
+              },
+              {
+                key: 'updatedAt',
+                label: '最近更新时间',
+                children: detailRecord?.updatedAt || '-',
+              },
+              {
+                key: 'formData',
+                label: '表单数据',
+                children: detailRecord?.formData || '-',
+              },
+            ]}
+          />
+          <WorkflowTraceTimeline
+            context={
+              detailRecord
+                ? {
+                    applicantName: detailRecord.applicantName,
+                    currentNodeName: detailRecord.currentNodeName,
+                    finishedAt: detailRecord.finishedAt,
+                    startedAt: detailRecord.submittedAt,
+                    workflowInstanceId: detailRecord.workflowInstanceId,
+                    workflowStatus: detailRecord.workflowStatus,
+                    workflowStatusMsg: detailRecord.workflowStatusMsg,
+                  }
+                : null
+            }
+            emptyDescription="暂无可演示的流程轨迹"
+          />
+        </Space>
       </Drawer>
     </PageContainer>
   );

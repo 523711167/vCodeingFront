@@ -32,6 +32,8 @@ export const API_ENDPOINTS = {
   // bizApply 域承接“业务办理/草稿/提交审批”这类运行态接口。
   // 这样可以和业务定义配置接口拆开，避免页面在 import 时把配置态和运行态混成一组。
   bizApply: {
+    applyDetail: '/sys/biz-apply/apply/detail',
+    applyPage: '/sys/biz-apply/apply/page',
     draftDetail: '/sys/biz-apply/draft/detail',
     draftPage: '/sys/biz-apply/draft/page',
     queryDetail: '/sys/biz-apply/query/detail',
@@ -74,6 +76,7 @@ export const API_ENDPOINTS = {
   },
   workflowBiz: {
     audit: '/sys/workflow-biz/audit',
+    recall: '/sys/workflow-biz/recall',
     submit: '/sys/workflow-biz/submit',
   },
   dept: {

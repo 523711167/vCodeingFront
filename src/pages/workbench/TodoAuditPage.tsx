@@ -13,6 +13,7 @@ import {
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageContainer from '@/components/PageContainer';
+import WorkflowTraceTimeline from '@/components/workflow/WorkflowTraceTimeline';
 import {
   fetchWorkflowTodoDetail,
   type WorkflowTodoRecord,
@@ -179,6 +180,23 @@ function TodoAuditPage() {
               <Empty description="暂未获取到代办详情" image={Empty.PRESENTED_IMAGE_SIMPLE} />
             )}
           </Card>
+
+          <WorkflowTraceTimeline
+            context={
+              detailRecord
+                ? {
+                    applicantName: detailRecord.applicantName,
+                    currentNodeName: detailRecord.nodeName,
+                    startedAt: detailRecord.startedAt,
+                    workflowInstanceId: detailRecord.workflowInstanceId,
+                    workflowStatus: detailRecord.approverStatus,
+                    workflowStatusMsg: detailRecord.approverStatusMsg,
+                  }
+                : null
+            }
+            emptyDescription="暂未获取到代办轨迹演示数据"
+            showOverview
+          />
 
           <Card title="审核意见">
             <Form<AuditFormValues>

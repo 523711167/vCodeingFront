@@ -101,6 +101,11 @@ export interface AuditWorkflowBizPayload {
   comment?: string;
 }
 
+export interface RecallWorkflowBizPayload {
+  instanceId: number;
+  comment?: string;
+}
+
 export interface CreateWorkflowDefinitionPayload {
   name: string;
   code: string;
@@ -198,5 +203,15 @@ export async function auditWorkflowBiz(payload: AuditWorkflowBizPayload) {
     // 审核动作属于流程运行态写接口。
     // 统一收口在 workflow service，便于后续继续补转交、加签、撤回等运行态动作。
     url: API_ENDPOINTS.workflowBiz.audit,
+  });
+}
+
+export async function recallWorkflowBiz(payload: RecallWorkflowBizPayload) {
+  return request<Record<string, never>>({
+    data: payload,
+    method: 'post',
+    // 撤回入口给“我的发起”使用。
+    // 统一放在 workflow service，便于后续继续补转交、加签等运行态动作。
+    url: API_ENDPOINTS.workflowBiz.recall,
   });
 }

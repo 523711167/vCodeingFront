@@ -8,6 +8,7 @@ export interface BizApplyDraftRecord {
   bizDefinitionId: number;
   title?: string;
   bizStatus?: string;
+  bizStatusMsg?: string;
   applicantId?: number;
   applicantName?: string;
   deptId?: number;
@@ -17,6 +18,13 @@ export interface BizApplyDraftRecord {
   formData?: string;
   updatedAt?: string;
   workflowName?: string;
+  submittedAt?: string;
+  finishedAt?: string;
+  // “我的发起”撤回动作依赖流程实例 ID。
+  // OpenAPI 当前 schema 没显式写出这个字段，这里先按联调需要声明成可选，
+  // 如果后端后续把文档补齐，继续和真实 schema 保持一致即可。
+  workflowInstanceId?: number;
+  instanceId?: number;
 }
 
 export interface SaveBizApplyDraftPayload {
@@ -119,6 +127,21 @@ export interface WorkflowQueryPageResult {
   records: WorkflowQueryRecord[];
 }
 
+export interface WorkflowApplyPageQuery {
+  pageNum: number;
+  pageSize: number;
+  bizDefinitionId?: number;
+  title?: string;
+}
+
+export interface WorkflowApplyPageResult {
+  pageNum: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  records: BizApplyDraftRecord[];
+}
+
 export async function saveBizApplyDraft(payload: SaveBizApplyDraftPayload) {
   return request<BizApplyDraftRecord>({
     data: payload,
@@ -192,5 +215,23 @@ export async function fetchWorkflowQueryDetail(bizApplyId: number) {
     method: 'get',
     params: { bizApplyId },
     url: API_ENDPOINTS.bizApply.queryDetail,
+  });
+}
+
+export async function fetchWorkflowApplyPage(query: WorkflowApplyPageQuery) {
+  return request<WorkflowApplyPageResult>({
+    method: 'get',
+    params: query,
+    // “我的发起”最新接口已经从 launch/* 收敛到 apply/*。
+    // 这里同步切换到新路径，避免页面继续命中已下线的旧地址。
+    url: API_ENDPOINTS.bizApply.applyPage,
+  });
+}
+
+export async function fetchWorkflowApplyDetail(id: number) {
+  return request<BizApplyDraftRecord>({
+    method: 'get',
+    params: { id },
+    url: API_ENDPOINTS.bizApply.applyDetail,
   });
 }
