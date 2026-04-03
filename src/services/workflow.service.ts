@@ -106,6 +106,11 @@ export interface RecallWorkflowBizPayload {
   comment?: string;
 }
 
+export interface CancelWorkflowBizPayload {
+  instanceId: number;
+  comment?: string;
+}
+
 export interface CreateWorkflowDefinitionPayload {
   name: string;
   code: string;
@@ -213,5 +218,15 @@ export async function recallWorkflowBiz(payload: RecallWorkflowBizPayload) {
     // 撤回入口给“我的发起”使用。
     // 统一放在 workflow service，便于后续继续补转交、加签等运行态动作。
     url: API_ENDPOINTS.workflowBiz.recall,
+  });
+}
+
+export async function cancelWorkflowBiz(payload: CancelWorkflowBizPayload) {
+  return request<Record<string, never>>({
+    data: payload,
+    method: 'post',
+    // “我的发起”的取消按钮已经有专门 cancel 接口，不再复用 recall。
+    // 单独拆出来后，前端文案和后端动作语义就能保持一致。
+    url: API_ENDPOINTS.workflowBiz.cancel,
   });
 }

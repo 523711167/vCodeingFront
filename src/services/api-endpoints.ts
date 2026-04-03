@@ -76,6 +76,7 @@ export const API_ENDPOINTS = {
   },
   workflowBiz: {
     audit: '/sys/workflow-biz/audit',
+    cancel: '/sys/workflow-biz/cancel',
     recall: '/sys/workflow-biz/recall',
     submit: '/sys/workflow-biz/submit',
   },

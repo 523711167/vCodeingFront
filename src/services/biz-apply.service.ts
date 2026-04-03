@@ -18,6 +18,7 @@ export interface BizApplyDraftRecord {
   formData?: string;
   updatedAt?: string;
   workflowName?: string;
+  cancelReason?: string;
   submittedAt?: string;
   finishedAt?: string;
   // “我的发起”撤回动作依赖流程实例 ID。
@@ -105,6 +106,7 @@ export interface WorkflowQueryRecord {
   currentNodeName?: string;
   currentNodeType?: string;
   formData?: string;
+  cancelReason?: string;
   submittedAt?: string;
   finishedAt?: string;
   updatedAt?: string;

@@ -163,6 +163,13 @@ function QueryPage() {
         render: (value: string | undefined) => value || '-',
       },
       {
+        title: '取消原因',
+        dataIndex: 'cancelReason',
+        ellipsis: true,
+        width: 220,
+        render: (value: string | undefined) => value || '-',
+      },
+      {
         title: '操作',
         key: 'action',
         fixed: 'right',
@@ -342,6 +349,11 @@ function QueryPage() {
                 key: 'updatedAt',
                 label: '最近更新时间',
                 children: detailRecord?.updatedAt || '-',
+              },
+              {
+                key: 'cancelReason',
+                label: '取消原因',
+                children: detailRecord?.cancelReason || '-',
               },
               {
                 key: 'formData',

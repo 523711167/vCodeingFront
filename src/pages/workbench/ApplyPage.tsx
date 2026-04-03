@@ -21,11 +21,15 @@ import {
 } from '@/services/biz-apply.service';
 import { fetchBizDefinitionList } from '@/services/biz.service';
 import { showErrorMessageOnce } from '@/services/error-message';
-import { recallWorkflowBiz } from '@/services/workflow.service';
+import { cancelWorkflowBiz } from '@/services/workflow.service';
 
 interface ApplySearchFormValues {
   id?: string;
   title?: string;
+}
+
+interface CancelFormValues {
+  comment: string;
 }
 
 const initialPageQuery: WorkflowApplyPageQuery = {
@@ -60,6 +64,7 @@ function getLaunchStatusColor(status?: string) {
 function ApplyPage() {
   const { message, modal } = AntdApp.useApp();
   const [searchForm] = Form.useForm<ApplySearchFormValues>();
+  const [cancelForm] = Form.useForm<CancelFormValues>();
   const [query, setQuery] = useState<WorkflowApplyPageQuery>(initialPageQuery);
   const [pageData, setPageData] = useState<WorkflowApplyPageResult>(initialPageData);
   const [tableLoading, setTableLoading] = useState(false);
@@ -164,12 +169,6 @@ function ApplyPage() {
         render: (value: string | undefined) => value || '-',
       },
       {
-        title: '绑定流程',
-        dataIndex: 'workflowName',
-        width: 180,
-        render: (value: string | undefined) => value || '-',
-      },
-      {
         title: '提交时间',
         dataIndex: 'submittedAt',
         width: 180,
@@ -179,6 +178,13 @@ function ApplyPage() {
         title: '结束时间',
         dataIndex: 'finishedAt',
         width: 180,
+        render: (value: string | undefined) => value || '-',
+      },
+      {
+        title: '取消原因',
+        dataIndex: 'cancelReason',
+        ellipsis: true,
+        width: 220,
         render: (value: string | undefined) => value || '-',
       },
       {
@@ -205,7 +211,7 @@ function ApplyPage() {
                   handleRecall(record);
                 }}
               >
-                撤回
+                取消
               </Button>
             )}
           </Space>
@@ -255,36 +261,71 @@ function ApplyPage() {
   }
 
   function handleRecall(record: BizApplyDraftRecord) {
+    cancelForm.setFieldsValue({
+      comment: '',
+    });
+
     modal.confirm({
-      title: `确认撤回申请“${record.title || record.id}”吗？`,
-      content: '撤回后当前流程将终止，通常需要重新修改后再发起。',
-      okText: '确认撤回',
+      title: `确认取消申请“${record.title || record.id}”吗？`,
+      content: (
+        <Form<CancelFormValues> form={cancelForm} layout="vertical">
+          <Form.Item
+            extra="取消原因会随取消接口一并提交给后端。"
+            label="取消原因"
+            name="comment"
+            rules={[
+              {
+                required: true,
+                message: '请输入取消原因',
+              },
+              {
+                max: 500,
+                message: '取消原因最多输入 500 个字符',
+              },
+            ]}
+          >
+            <Input.TextArea placeholder="请输入取消原因" rows={4} />
+          </Form.Item>
+        </Form>
+      ),
+      okText: '确认取消',
       cancelText: '取消',
       onOk: async () => {
         try {
+          const values = await cancelForm.validateFields();
           setRecallingId(record.id);
 
-          // 撤回接口要求 instanceId。
-          // 列表页如果没直接返回流程实例 ID，这里补查一次详情，避免为了按钮额外改分页字段依赖。
-          const detail = await fetchWorkflowApplyDetail(record.id);
-          const instanceId = detail.workflowInstanceId ?? detail.instanceId;
+          // 现在 page 接口已经直接返回流程实例 ID，
+          // 取消动作直接消费列表行数据即可，避免用户点击后再多发一次详情请求。
+          const instanceId = record.workflowInstanceId ?? record.instanceId;
 
           if (!instanceId) {
-            message.warning('当前发起记录缺少流程实例ID，暂时无法撤回');
+            message.warning('当前发起记录缺少流程实例ID，暂时无法取消');
             return;
           }
 
-          await recallWorkflowBiz({
-            comment: '发起人主动撤回',
+          await cancelWorkflowBiz({
+            comment: values.comment.trim(),
             instanceId,
           });
 
-          message.success('撤回成功');
+          message.success('取消成功');
           setQuery((previousQuery) => ({
             ...previousQuery,
           }));
         } catch (error) {
-          showErrorMessageOnce(error, '撤回失败');
+          if (
+            error &&
+            typeof error === 'object' &&
+            'errorFields' in (error as Record<string, unknown>)
+          ) {
+            // 取消原因未填写时，直接保留弹窗并展示表单校验提示，
+            // 不再把这类前端校验问题误报成“取消失败”的接口异常。
+            return Promise.reject(error);
+          }
+
+          showErrorMessageOnce(error, '取消失败');
+          return Promise.reject(error);
         } finally {
           setRecallingId(null);
         }
@@ -394,6 +435,11 @@ function ApplyPage() {
               key: 'finishedAt',
               label: '结束时间',
               children: detailRecord?.finishedAt || '-',
+            },
+            {
+              key: 'cancelReason',
+              label: '取消原因',
+              children: detailRecord?.cancelReason || '-',
             },
             {
               key: 'formData',
