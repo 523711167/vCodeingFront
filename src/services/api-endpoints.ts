@@ -36,6 +36,8 @@ export const API_ENDPOINTS = {
     applyPage: '/sys/biz-apply/apply/page',
     draftDetail: '/sys/biz-apply/draft/detail',
     draftPage: '/sys/biz-apply/draft/page',
+    processedDetail: '/sys/biz-apply/processed/detail',
+    processedPage: '/sys/biz-apply/processed/page',
     queryDetail: '/sys/biz-apply/query/detail',
     queryPage: '/sys/biz-apply/query/page',
     saveAndSubmit: '/sys/biz-apply/save-and-submit',

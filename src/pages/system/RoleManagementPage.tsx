@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type MouseEvent } from 'react';
+import { useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react';
 import type { ColumnsType } from 'antd/es/table';
 import {
   App as AntdApp,
@@ -65,7 +65,7 @@ interface RoleDataScopeFormValues {
 
 interface RoleMenuTreeNode {
   key: number;
-  title: string;
+  title: ReactNode;
   children?: RoleMenuTreeNode[];
 }
 
@@ -233,8 +233,16 @@ function buildDisabledDeptIds(
 function buildRoleMenuTreeData(nodes: MenuRecord[]): RoleMenuTreeNode[] {
   return nodes.map((node) => ({
     key: node.id,
-    // 角色菜单授权场景先优先展示原始菜单名称，避免树标题里叠加过多信息影响勾选效率。
-    title: node.name,
+    // 角色菜单树把“名称 + 类型”一起显示，是为了在目录/菜单/按钮同时出现时，
+    // 用户能直观看出当前勾选的是哪一类节点，避免只看名称时误判层级和用途。
+    title: (
+      <Space size={8}>
+        <span>{node.name}</span>
+        <Tag bordered={false} color={node.type === 'BUTTON' ? 'purple' : node.type === 'MENU' ? 'blue' : 'gold'}>
+          {node.typeMsg}
+        </Tag>
+      </Space>
+    ),
     children: node.children?.length ? buildRoleMenuTreeData(node.children) : undefined,
   }));
 }
@@ -993,11 +1001,17 @@ function RoleManagementPage() {
             <Tree
               blockNode
               checkable
+              checkStrictly
               checkedKeys={checkedRoleMenuIds}
               defaultExpandAll
               height={380}
               onCheck={(checkedKeys) => {
-                setCheckedRoleMenuIds(checkedKeys as number[]);
+                // 角色菜单授权要求目录、菜单、按钮独立勾选，不能再让 antd 默认的父子联动改写结果。
+                // checkStrictly 打开后 onCheck 会返回对象结构，这里只收口 checked 部分即可。
+                const normalizedCheckedKeys = Array.isArray(checkedKeys)
+                  ? (checkedKeys as number[])
+                  : (checkedKeys.checked as number[]);
+                setCheckedRoleMenuIds(normalizedCheckedKeys);
               }}
               treeData={roleMenuTreeNodes}
             />

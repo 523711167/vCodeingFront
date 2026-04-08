@@ -90,6 +90,22 @@ export interface WorkflowTodoPageResult {
   records: WorkflowTodoRecord[];
 }
 
+export interface WorkflowProcessedPageQuery {
+  pageNum: number;
+  pageSize: number;
+  bizApplyId?: number;
+  bizDefinitionId?: number;
+  title?: string;
+}
+
+export interface WorkflowProcessedPageResult {
+  pageNum: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  records: WorkflowTodoRecord[];
+}
+
 export interface WorkflowQueryRecord {
   bizApplyId: number;
   bizDefinitionId: number;
@@ -201,6 +217,26 @@ export async function fetchWorkflowTodoDetail(approverInstanceId: number) {
     method: 'get',
     params: { approverInstanceId },
     url: API_ENDPOINTS.bizApply.todoDetail,
+  });
+}
+
+export async function fetchWorkflowProcessedPage(
+  query: WorkflowProcessedPageQuery,
+) {
+  return request<WorkflowProcessedPageResult>({
+    method: 'get',
+    params: query,
+    // 已办箱和代办箱当前返回结构一致，都复用 WorkflowTodoVO。
+    // 先把两条链路拆成独立 service，后续任一字段发生分化时就不需要再做破坏式改造。
+    url: API_ENDPOINTS.bizApply.processedPage,
+  });
+}
+
+export async function fetchWorkflowProcessedDetail(approverInstanceId: number) {
+  return request<WorkflowTodoRecord>({
+    method: 'get',
+    params: { approverInstanceId },
+    url: API_ENDPOINTS.bizApply.processedDetail,
   });
 }
 
