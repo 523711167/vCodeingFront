@@ -111,6 +111,14 @@ export interface CancelWorkflowBizPayload {
   comment?: string;
 }
 
+export interface DelegateWorkflowBizPayload {
+  instanceId: number;
+  nodeInstanceId: number;
+  approverInstanceId: number;
+  delegateToUserId: number;
+  comment?: string;
+}
+
 export interface CreateWorkflowDefinitionPayload {
   name: string;
   code: string;
@@ -228,5 +236,16 @@ export async function cancelWorkflowBiz(payload: CancelWorkflowBizPayload) {
     // “我的发起”的取消按钮已经有专门 cancel 接口，不再复用 recall。
     // 单独拆出来后，前端文案和后端动作语义就能保持一致。
     url: API_ENDPOINTS.workflowBiz.cancel,
+  });
+}
+
+export async function delegateWorkflowBiz(payload: DelegateWorkflowBizPayload) {
+  return request<Record<string, never>>({
+    data: payload,
+    method: 'post',
+    // 转办同样属于流程运行态写接口。
+    // 先统一收口在 workflow service，后续如果还要加“转办备注 / 选人策略 / 批量转办”，
+    // 页面层只需要继续围绕这个 payload 扩展，不必散落到多个 service 文件里。
+    url: API_ENDPOINTS.workflowBiz.delegate,
   });
 }

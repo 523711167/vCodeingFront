@@ -79,6 +79,9 @@ export const API_ENDPOINTS = {
   workflowBiz: {
     audit: '/sys/workflow-biz/audit',
     cancel: '/sys/workflow-biz/cancel',
+    // 转办属于流程运行态动作，单独挂在 workflowBiz 域下，
+    // 这样代办箱、已办箱、后续移动端入口都能复用同一条地址定义。
+    delegate: '/sys/workflow-biz/delegate',
     recall: '/sys/workflow-biz/recall',
     submit: '/sys/workflow-biz/submit',
   },
